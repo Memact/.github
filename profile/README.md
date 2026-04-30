@@ -1,55 +1,71 @@
 # Memact
 
-Memact connects your thoughts to the digital patterns that may have shaped them.
+[![Memact](https://img.shields.io/badge/-Memact-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact)
 
-It tries to answer a simple question:
+Memact connects a thought to the digital patterns that may have shaped it.
+
+The working question:
 
 ```text
-Where do ideas come from?
+Where did this thought come from?
 ```
 
-Memact is not meant to be a generic chatbot. It is a memory system for personal digital activity. It captures useful activity, turns it into evidence, forms virtual schema packets, stores what should survive, and lets a user query that memory later.
+Memact is a memory system, not a chatbot wrapper. It captures useful activity, keeps evidence, forms virtual schema packets, and lets a user query that memory later.
 
-## Product Shape
+## System
 
 ```text
 Capture -> Inference -> Schema -> Memory -> Website / Query -> Origin / Influence
 ```
 
-The user experience is simple:
+User flow:
 
 1. A user enters a thought or answers a short survey.
 2. Memact retrieves relevant schema memories and evidence.
 3. Memact shows what may have introduced, shaped, repeated, or reinforced that thought.
-4. The answer stays grounded in captured activity instead of unsupported explanation.
+4. The answer stays tied to evidence when evidence exists.
 
-The long-term goal is for models and apps to act on a reusable memory layer, not just respond to a single prompt.
+The long-term goal is a reusable memory layer that models and apps can act on.
 
-## Repositories
+## Core Repos
 
-- [Capture](https://github.com/Memact/Capture)
-  Browser activity capture, content extraction, local evidence storage, public bridge API.
+[![Capture](https://img.shields.io/badge/-Capture-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Capture)
 
-- [Inference](https://github.com/Memact/Inference)
-  Meaning filter that turns captured activity into retained evidence packets.
+Browser activity capture, content extraction, local evidence storage, public bridge API.
 
-- [Schema](https://github.com/Memact/Schema)
-  Forms virtual cognitive-schema packets from repeated meaningful activity.
+[![Inference](https://img.shields.io/badge/-Inference-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Inference)
 
-- [Memory](https://github.com/Memact/Memory)
-  Stores schema/activity memories, exposes CRUD and RAG retrieval, tracks memory updates.
+Meaning filter that turns captured activity into retained evidence packets.
 
-- [Website](https://github.com/Memact/Website)
-  Minimal user interface for prompt mode, survey mode, history, settings, and answers.
+[![Schema](https://img.shields.io/badge/-Schema-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Schema)
 
-- [Origin](https://github.com/Memact/Origin)
-  Finds specific source candidates that may have introduced or closely matched a thought.
+Forms virtual cognitive-schema packets from repeated meaningful activity.
 
-- [Influence](https://github.com/Memact/Influence)
-  Finds repeated shaping patterns, transitions, and directional influence signals.
+[![Memory](https://img.shields.io/badge/-Memory-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Memory)
 
-- [LandingPage](https://github.com/Memact/LandingPage)
-  Public landing page and demo flow.
+Stores schema/activity memories, exposes CRUD and RAG retrieval, tracks memory updates.
+
+[![Website](https://img.shields.io/badge/-Website-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Website)
+
+Minimal user interface for prompt mode, survey mode, history, settings, and answers.
+
+[![Origin](https://img.shields.io/badge/-Origin-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Origin)
+
+Finds specific source candidates that may have introduced or closely matched a thought.
+
+[![Influence](https://img.shields.io/badge/-Influence-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Influence)
+
+Finds repeated shaping patterns, transitions, and directional influence signals.
+
+## Other Works
+
+[![LandingPage](https://img.shields.io/badge/-LandingPage-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/LandingPage)
+
+Static public demo page.
+
+[![AutoMod](https://img.shields.io/badge/-AutoMod-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/AutoMod)
+
+Separate moderation project under the same org.
 
 ## Principles
 
