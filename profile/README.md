@@ -1,6 +1,5 @@
-# Memact
-
 [![Memact](https://img.shields.io/badge/-Memact-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact)
+# Memact
 
 Memact connects a thought to the digital patterns that may have shaped it.
 
@@ -65,7 +64,7 @@ Static public demo page.
 
 [![AutoMod](https://img.shields.io/badge/-AutoMod-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/AutoMod)
 
-Separate moderation project under the same org.
+Separate Discord server moderation project under the same org.
 
 ## Principles
 
