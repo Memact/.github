@@ -1,4 +1,4 @@
-[![Memact](https://img.shields.io/badge/-Memact-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact)
+[![Memact](https://img.shields.io/badge/-Memact-00011B?style=for-the-badge&logoColor=white)](https://memact.com)
 # Memact
 
 Memact connects a thought to the digital patterns that may have shaped it.
