@@ -28,25 +28,22 @@ The long-term goal is a reusable memory layer that models and apps can act on.
 
 ## Core Repos
 
-[![Capture](https://img.shields.io/badge/-Capture-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Capture) -> Browser activity capture, content extraction, local evidence storage, public bridge API.
-
-[![Inference](https://img.shields.io/badge/-Inference-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Inference) -> Meaning filter that turns captured activity into retained evidence packets.
-
-[![Schema](https://img.shields.io/badge/-Schema-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Schema) -> Forms virtual cognitive-schema packets from repeated meaningful activity.
-
-[![Memory](https://img.shields.io/badge/-Memory-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Memory) -> Stores schema/activity memories, exposes CRUD and RAG retrieval, tracks memory updates.
-
-[![Website](https://img.shields.io/badge/-Website-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Website) -> Minimal user interface for prompt mode, survey mode, history, settings, and answers.
-
-[![Origin](https://img.shields.io/badge/-Origin-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Origin) -> Finds specific source candidates that may have introduced or closely matched a thought.
-
-[![Influence](https://img.shields.io/badge/-Influence-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Influence) -> Finds repeated shaping patterns, transitions, and directional influence signals.
+| Repo | Role |
+|---|---|
+| [![Capture](https://img.shields.io/badge/-Capture-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Capture) | Browser activity capture, content extraction, local evidence storage, public bridge API. |
+| [![Inference](https://img.shields.io/badge/-Inference-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Inference) | Meaning filter that turns captured activity into retained evidence packets. |
+| [![Schema](https://img.shields.io/badge/-Schema-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Schema) | Forms virtual cognitive-schema packets from repeated meaningful activity. |
+| [![Memory](https://img.shields.io/badge/-Memory-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Memory) | Stores schema/activity memories, exposes CRUD and RAG retrieval, tracks memory updates. |
+| [![Website](https://img.shields.io/badge/-Website-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Website) | Minimal user interface for prompt mode, survey mode, history, settings, and answers. |
+| [![Origin](https://img.shields.io/badge/-Origin-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Origin) | Finds source candidates that may have introduced or closely matched a thought. |
+| [![Influence](https://img.shields.io/badge/-Influence-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Influence) | Finds repeated shaping patterns, transitions, and directional influence signals. |
 
 ## Other Works
 
-[![LandingPage](https://img.shields.io/badge/-LandingPage-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/LandingPage) -> Static public demo page.
-
-[![AutoMod](https://img.shields.io/badge/-AutoMod-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/AutoMod) -> Separate Discord server moderation project under the same org.
+| Repo | Role |
+|---|---|
+| [![LandingPage](https://img.shields.io/badge/-LandingPage-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/LandingPage) | Static public demo page. |
+| [![AutoMod](https://img.shields.io/badge/-AutoMod-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/AutoMod) | Separate Discord server moderation project under the same org. |
 
 ## Principles
 
