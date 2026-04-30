@@ -92,4 +92,3 @@ automatic capture
 ## License
 
 See the license file in each repository.
-
