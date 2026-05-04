@@ -70,3 +70,12 @@ automatic capture
 
 See the license file in each repository.
 
+## Brand Use
+
+Open-source licenses in Memact repositories apply to source code only.
+
+The Memact name, logos, wordmarks, icons, artwork, screenshots, and other brand
+assets are not part of those code licenses. Forks can use the code under the
+license in each repository, but they should not present themselves as official
+Memact projects, reuse Memact branding as their own, or imply endorsement by
+Memact.
