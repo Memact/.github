@@ -13,7 +13,7 @@ Memact is a memory system, not a chatbot wrapper. It captures useful activity, k
 ## System
 
 ```text
-Capture -> Inference -> Schema -> Memory -> Website / Query -> Origin / Influence
+Capture -> Inference -> Schema -> Memory -> Website / Query
 ```
 
 User flow:
@@ -27,6 +27,8 @@ The long-term goal is a reusable memory layer that models and apps can act on.
 
 ## Core Repos
 
+These repositories represent the current Memact system direction.
+
 | Repo | Role |
 |---|---|
 | [![Capture](https://img.shields.io/badge/-Capture-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Capture) | Browser activity capture, content extraction, local evidence storage, public bridge API. |
@@ -34,8 +36,15 @@ The long-term goal is a reusable memory layer that models and apps can act on.
 | [![Schema](https://img.shields.io/badge/-Schema-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Schema) | Forms virtual cognitive-schema packets from repeated meaningful activity. |
 | [![Memory](https://img.shields.io/badge/-Memory-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Memory) | Stores schema/activity memories, exposes CRUD and RAG retrieval, tracks memory updates. |
 | [![Website](https://img.shields.io/badge/-Website-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Website) | Minimal user interface for prompt mode, survey mode, history, settings, and answers. |
-| [![Origin](https://img.shields.io/badge/-Origin-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Origin) | Finds source candidates that may have introduced or closely matched a thought. |
-| [![Influence](https://img.shields.io/badge/-Influence-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Influence) | Finds repeated shaping patterns, transitions, and directional influence signals. |
+
+## Archived Experiments
+
+These repositories are older MIT-licensed experiments and are kept for reference. They do not represent the current protected Memact core.
+
+| Repo | Role |
+|---|---|
+| [![Origin](https://img.shields.io/badge/-Origin-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Origin) | Archived experiment for finding source candidates that may have introduced or closely matched a thought. |
+| [![Influence](https://img.shields.io/badge/-Influence-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Influence) | Archived experiment for repeated shaping patterns, transitions, and directional influence signals. |
 
 ## Other Works
 
@@ -68,7 +77,11 @@ automatic capture
 
 ## License
 
-See the license file in each repository.
+Memact is developed publicly with selected components open-sourced.
+
+Current core Memact repositories are source-visible but proprietary unless their repository license says otherwise. Archived experiments such as Origin and Influence remain MIT-licensed for reference. Separate side projects such as AutoMod may also use their own open-source licenses.
+
+Always check the `LICENSE` file in each repository before using, copying, modifying, or redistributing code.
 
 ## Brand Use
 
