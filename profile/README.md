@@ -3,15 +3,32 @@
 Memact turns useful captured activity into a knowledge graph of nodes, edges,
 evidence, and virtual schema packets.
 
-The working question:
+It is not one product surface. It is a memory layer that other products can use
+with user consent.
+
+Example apps built on Memact could ask:
 
 ```text
-Where did this thought come from?
+What digital consumption patterns are repeating?
+What new concepts has this user encountered lately?
+Which sources helped shape this thought?
+What topics, people, tools, or emotions keep showing up together?
+What changed in this user's research or learning map this week?
 ```
 
 Memact is memory infrastructure, not a chatbot wrapper. It captures useful
 activity, skips sensitive activity, keeps evidence, forms schema packets, and
 lets apps use that memory through scoped consent.
+
+## Example Use Cases
+
+- Thought-source tracing: show possible sources and patterns related to a user-entered thought.
+- Digital consumption maps: show repeated topics, source types, intensity, and drift over time.
+- Personal knowledge dictionary: build a private glossary from concepts the user actually encountered.
+- Research memory: connect papers, articles, videos, notes, searches, and recurring questions.
+- Decision support: surface one-sided inputs, repeated cues, or missing counter-evidence before a choice.
+- Learning maps: show how a topic moved from first exposure to repeated schema.
+- App memory API: let approved apps ask Memact to capture, organize, and retrieve structured memory without receiving a raw graph dump.
 
 ## System
 
