@@ -4,7 +4,7 @@ Memact turns useful captured activity into a knowledge graph of nodes, edges,
 evidence, and virtual schema packets.
 
 It is not one product surface. It is a memory layer that other products can use
-with user consent.
+with user permission.
 
 Example apps built on Memact could ask:
 
@@ -18,7 +18,7 @@ What changed in this user's research or learning map this week?
 
 Memact is memory infrastructure, not a chatbot wrapper. It captures useful
 activity, skips sensitive activity, keeps evidence, forms schema packets, and
-lets apps use that memory through scoped consent.
+lets apps use that memory through scoped access.
 
 ## Example Use Cases
 
@@ -36,18 +36,17 @@ lets apps use that memory through scoped consent.
 Access -> Capture -> Inference -> Schema -> Memory
              ^                               |
              |                               v
-          apps use Memact through scoped consent
+          apps use Memact through scoped permission and activity categories
 ```
 
 User flow:
 
 1. A user or app asks Memact to capture allowed activity.
-2. Access checks API key scopes and user consent.
+2. Access checks API key scopes, user permission, and selected activity categories.
 3. Capture keeps useful evidence and skips sensitive pages.
 4. Inference decides what becomes candidate nodes and edges.
 5. Schema organizes repeated meaning into virtual cognitive-schema packets.
-6. Memory stores what survives and exposes only permitted summaries, evidence,
-   or graph objects.
+6. Memory stores what survives and exposes only permitted summaries, evidence, or graph objects.
 
 The goal is a reusable memory layer that models and apps can act on.
 
@@ -55,12 +54,12 @@ The goal is a reusable memory layer that models and apps can act on.
 
 | Repo | Role |
 |---|---|
-| [![Access](https://img.shields.io/badge/-Access-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Access) | Signup, signin, app registration, API keys, consent, scopes, and revocation. |
+| [![Access](https://img.shields.io/badge/-Access-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Access) | Signup, signin, app registration, API keys, Connect App permission, scopes, activity categories, and revocation. |
 | [![Capture](https://img.shields.io/badge/-Capture-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Capture) | Browser and device activity capture, sensitive-page exclusion, local evidence storage, and bridge APIs. |
 | [![Inference](https://img.shields.io/badge/-Inference-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Inference) | Meaning filter that decides what activity becomes retained evidence, nodes, and edges. |
 | [![Schema](https://img.shields.io/badge/-Schema-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Schema) | Forms classified virtual cognitive-schema graph packets from repeated meaningful activity. |
 | [![Memory](https://img.shields.io/badge/-Memory-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Memory) | Stores schema/activity memories, graph objects, CRUD records, and retrieval context. |
-| [![Website](https://img.shields.io/badge/-Website-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Website) | Simple Access portal for signin, app registration, consent, and API key management. |
+| [![Website](https://img.shields.io/badge/-Website-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Website) | Simple Access portal for signin, app registration, Connect App permission, category-scoped permissions, and API key management. |
 
 ## Why This `.github` Repo Exists
 
@@ -85,37 +84,20 @@ documents, demos, and public repo surfaces.
 - **Core contrast:** white on deep navy
 - **Visual direction:** minimal, high-contrast, dark, quiet, and precise
 - **Logo system:** Memact wordmark, Memact icon mark, and approved lockups only
-- **Typography direction:** bold geometric display for headings and logo-adjacent
-  moments, with clean readable sans-serif text for product copy and UI
-- **UI language:** rounded pills, rounded panels, soft glass-like surfaces, thin
-  white borders, and restrained gradients
+- **Typography direction:** bold geometric display for headings and logo-adjacent moments, with clean readable sans-serif text for product copy and UI
+- **UI language:** rounded pills, rounded panels, soft glass-like surfaces, thin white borders, and restrained gradients
 - **Motion direction:** subtle, purposeful, and never noisy
 - **Copy tone:** simple, direct, human, and non-hyped
 
-The brand is meant to feel:
+The brand is meant to feel private, calm, serious, clean, and evidence-led.
 
-- private
-- calm
-- serious
-- clean
-- evidence-led
+It should not feel loud, childish, overly futuristic, corporate-blue generic, or
+AI-marketing heavy.
 
-It should not feel:
-
-- loud
-- playful in a childish way
-- overly futuristic
-- corporate-blue generic
-- AI-marketing heavy
-
-When Memact appears publicly, the preferred visual rules are:
-
-- keep the deep navy and white contrast intact
-- keep layouts uncluttered
-- use short, plain language
-- avoid decorative color drift away from the core palette
-- keep brand marks sharp, centered, and properly spaced
-- preserve the product’s “infrastructure with clarity” feeling
+When Memact appears publicly, keep the deep navy and white contrast intact,
+keep layouts uncluttered, use short plain language, avoid decorative color
+drift, keep brand marks sharp, and preserve the product's "infrastructure with
+clarity" feeling.
 
 ## Other Works
 
@@ -138,6 +120,7 @@ When Memact appears publicly, the preferred visual rules are:
 - Models are helpers, not the source of truth.
 - Captured activity is not memory until it survives filtering.
 - Apps use Memact to form schemas; they do not receive raw memory by default.
+- Apps can be limited to specific activity categories such as news, research, media, AI conversations, developer work, or documents.
 - Schemas are virtual mirrors, not medical claims.
 - Origin and influence are signals, not proof.
 
