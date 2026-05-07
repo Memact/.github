@@ -22,13 +22,13 @@ lets apps use that memory through scoped access.
 
 ## Example Use Cases
 
-- Thought-source tracing: show possible sources and patterns related to a user-entered thought.
-- Digital consumption maps: show repeated topics, source types, intensity, and drift over time.
-- Personal knowledge dictionary: build a private glossary from concepts the user actually encountered.
-- Research memory: connect papers, articles, videos, notes, searches, and recurring questions.
-- Decision support: surface one-sided inputs, repeated cues, or missing counter-evidence before a choice.
-- Learning maps: show how a topic moved from first exposure to repeated schema.
-- App memory API: let approved apps ask Memact to capture, organize, and retrieve structured memory without receiving a raw graph dump.
+* Thought-source tracing: show possible sources and patterns related to a user-entered thought.
+* Digital consumption maps: show repeated topics, source types, intensity, and drift over time.
+* Personal knowledge dictionary: build a private glossary from concepts the user actually encountered.
+* Research memory: connect papers, articles, videos, notes, searches, and recurring questions.
+* Decision support: surface one-sided inputs, repeated cues, or missing counter-evidence before a choice.
+* Learning maps: show how a topic moved from first exposure to repeated schema.
+* App memory API: let approved apps ask Memact to capture, organize, and retrieve structured memory without receiving a raw graph dump.
 
 ## System
 
@@ -52,14 +52,14 @@ The goal is a reusable memory layer that models and apps can act on.
 
 ## Core Repos
 
-| Repo | Role |
-|---|---|
-| [![Access](https://img.shields.io/badge/-Access-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Access) | Signup, signin, app registration, API keys, Connect App permission, scopes, activity categories, and revocation. |
-| [![Capture](https://img.shields.io/badge/-Capture-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Capture) | Browser and device activity capture, sensitive-page exclusion, local evidence storage, and bridge APIs. |
-| [![Inference](https://img.shields.io/badge/-Inference-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Inference) | Meaning filter that decides what activity becomes retained evidence, nodes, and edges. |
-| [![Schema](https://img.shields.io/badge/-Schema-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Schema) | Forms classified virtual cognitive-schema graph packets from repeated meaningful activity. |
-| [![Memory](https://img.shields.io/badge/-Memory-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Memory) | Stores schema/activity memories, graph objects, CRUD records, and retrieval context. |
-| [![Website](https://img.shields.io/badge/-Website-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Website) | Simple Access portal for signin, app registration, Connect App permission, category-scoped permissions, and API key management. |
+| Repo                                                                                                                                                  | Role                                                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [![Access](https://img.shields.io/badge/-Access-00011B?style=for-the-badge\&logo=github\&logoColor=white)](https://github.com/Memact/Access)          | Signup, signin, app registration, API keys, Connect App permission, scopes, activity categories, and revocation.                |
+| [![Capture](https://img.shields.io/badge/-Capture-00011B?style=for-the-badge\&logo=github\&logoColor=white)](https://github.com/Memact/Capture)       | Browser and device activity capture, sensitive-page exclusion, local evidence storage, and bridge APIs.                         |
+| [![Inference](https://img.shields.io/badge/-Inference-00011B?style=for-the-badge\&logo=github\&logoColor=white)](https://github.com/Memact/Inference) | Meaning filter that decides what activity becomes retained evidence, nodes, and edges.                                          |
+| [![Schema](https://img.shields.io/badge/-Schema-00011B?style=for-the-badge\&logo=github\&logoColor=white)](https://github.com/Memact/Schema)          | Forms classified virtual cognitive-schema graph packets from repeated meaningful activity.                                      |
+| [![Memory](https://img.shields.io/badge/-Memory-00011B?style=for-the-badge\&logo=github\&logoColor=white)](https://github.com/Memact/Memory)          | Stores schema/activity memories, graph objects, CRUD records, and retrieval context.                                            |
+| [![Website](https://img.shields.io/badge/-Website-00011B?style=for-the-badge\&logo=github\&logoColor=white)](https://github.com/Memact/Website)       | Simple Access portal for signin, app registration, Connect App permission, category-scoped permissions, and API key management. |
 
 ## Why This `.github` Repo Exists
 
@@ -67,10 +67,10 @@ This repository is the public front door for the Memact GitHub organization.
 
 It exists to:
 
-- explain what Memact is at a glance
-- show how the repos fit together
-- point contributors, developers, and reviewers to the right layer
-- hold shared community-facing files for the org profile
+* explain what Memact is at a glance
+* show how the repos fit together
+* point contributors, developers, and reviewers to the right layer
+* hold shared community-facing files for the org profile
 
 It is not the product runtime. The actual working layers live in the core repos above.
 
@@ -79,15 +79,15 @@ It is not the product runtime. The actual working layers live in the core repos 
 Memact uses a narrow, consistent brand system across the website, portal,
 documents, demos, and public repo surfaces.
 
-- **Name:** `Memact`
-- **Primary color:** `#00011B`
-- **Core contrast:** white on deep navy
-- **Visual direction:** minimal, high-contrast, dark, quiet, and precise
-- **Logo system:** Memact wordmark, Memact icon mark, and approved lockups only
-- **Typography direction:** bold geometric display for headings and logo-adjacent moments, with clean readable sans-serif text for product copy and UI
-- **UI language:** rounded pills, rounded panels, soft glass-like surfaces, thin white borders, and restrained gradients
-- **Motion direction:** subtle, purposeful, and never noisy
-- **Copy tone:** simple, direct, human, and non-hyped
+* **Name:** `Memact`
+* **Primary color:** `#00011B`
+* **Core contrast:** white on deep navy
+* **Visual direction:** minimal, high-contrast, dark, quiet, and precise
+* **Logo system:** Memact wordmark, Memact icon mark, and approved lockups only
+* **Typography direction:** bold geometric display for headings and logo-adjacent moments, with clean readable sans-serif text for product copy and UI
+* **UI language:** rounded pills, rounded panels, soft glass-like surfaces, thin white borders, and restrained gradients
+* **Motion direction:** subtle, purposeful, and never noisy
+* **Copy tone:** simple, direct, human, and non-hyped
 
 The brand is meant to feel private, calm, serious, clean, and evidence-led.
 
@@ -101,28 +101,28 @@ clarity" feeling.
 
 ## Other Works
 
-| Repo | Role |
-|---|---|
-| [![AutoMod](https://img.shields.io/badge/-AutoMod-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/AutoMod) | Separate Discord moderation project under the same org. |
+| Repo                                                                                                                                            | Role                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [![AutoMod](https://img.shields.io/badge/-AutoMod-00011B?style=for-the-badge\&logo=github\&logoColor=white)](https://github.com/Memact/AutoMod) | Separate Discord moderation project under the same org. |
 
 ## Public Archive
 
-| Repo | Role |
-|---|---|
-| [![Origin](https://img.shields.io/badge/-Origin-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Origin) | Open-source archive for early source-candidate experiments. |
-| [![Influence](https://img.shields.io/badge/-Influence-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Influence) | Open-source archive for early repeated-transition and influence-pattern experiments. |
-| [![LandingPage](https://img.shields.io/badge/-LandingPage-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/LandingPage) | Static public demo archive. |
+| Repo                                                                                                                                                        | Role                                                                                 |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| [![Origin](https://img.shields.io/badge/-Origin-00011B?style=for-the-badge\&logo=github\&logoColor=white)](https://github.com/Memact/Origin)                | Open-source archive for early source-candidate experiments.                          |
+| [![Influence](https://img.shields.io/badge/-Influence-00011B?style=for-the-badge\&logo=github\&logoColor=white)](https://github.com/Memact/Influence)       | Open-source archive for early repeated-transition and influence-pattern experiments. |
+| [![LandingPage](https://img.shields.io/badge/-LandingPage-00011B?style=for-the-badge\&logo=github\&logoColor=white)](https://github.com/Memact/LandingPage) | Static public demo archive.                                                          |
 
 ## Principles
 
-- Evidence first.
-- Local-first where possible.
-- Models are helpers, not the source of truth.
-- Captured activity is not memory until it survives filtering.
-- Apps use Memact to form schemas; they do not receive raw memory by default.
-- Apps can be limited to specific activity categories such as news, research, media, AI conversations, developer work, or documents.
-- Schemas are virtual mirrors, not medical claims.
-- Origin and influence are signals, not proof.
+* Evidence first.
+* Local-first where possible.
+* Models are helpers, not the source of truth.
+* Captured activity is not memory until it survives filtering.
+* Apps use Memact to form schemas; they do not receive raw memory by default.
+* Apps can be limited to specific activity categories such as news, research, media, AI conversations, developer work, or documents.
+* Schemas are virtual mirrors, not medical claims.
+* Origin and influence are signals, not proof.
 
 ## Current Status
 
