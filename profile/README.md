@@ -62,6 +62,19 @@ The goal is a reusable memory layer that models and apps can act on.
 | [![Memory](https://img.shields.io/badge/-Memory-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Memory) | Stores schema/activity memories, graph objects, CRUD records, and retrieval context. |
 | [![Website](https://img.shields.io/badge/-Website-00011B?style=for-the-badge&logoColor=white)](https://github.com/Memact/Website) | Simple Access portal for signin, app registration, consent, and API key management. |
 
+## Why This `.github` Repo Exists
+
+This repository is the public front door for the Memact GitHub organization.
+
+It exists to:
+
+- explain what Memact is at a glance
+- show how the repos fit together
+- point contributors, developers, and reviewers to the right layer
+- hold shared community-facing files for the org profile
+
+It is not the product runtime. The actual working layers live in the core repos above.
+
 ## Other Works
 
 | Repo | Role |
