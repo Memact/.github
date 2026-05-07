@@ -75,6 +75,48 @@ It exists to:
 
 It is not the product runtime. The actual working layers live in the core repos above.
 
+## Branding Elements
+
+Memact uses a narrow, consistent brand system across the website, portal,
+documents, demos, and public repo surfaces.
+
+- **Name:** `Memact`
+- **Primary color:** `#00011B`
+- **Core contrast:** white on deep navy
+- **Visual direction:** minimal, high-contrast, dark, quiet, and precise
+- **Logo system:** Memact wordmark, Memact icon mark, and approved lockups only
+- **Typography direction:** bold geometric display for headings and logo-adjacent
+  moments, with clean readable sans-serif text for product copy and UI
+- **UI language:** rounded pills, rounded panels, soft glass-like surfaces, thin
+  white borders, and restrained gradients
+- **Motion direction:** subtle, purposeful, and never noisy
+- **Copy tone:** simple, direct, human, and non-hyped
+
+The brand is meant to feel:
+
+- private
+- calm
+- serious
+- clean
+- evidence-led
+
+It should not feel:
+
+- loud
+- playful in a childish way
+- overly futuristic
+- corporate-blue generic
+- AI-marketing heavy
+
+When Memact appears publicly, the preferred visual rules are:
+
+- keep the deep navy and white contrast intact
+- keep layouts uncluttered
+- use short, plain language
+- avoid decorative color drift away from the core palette
+- keep brand marks sharp, centered, and properly spaced
+- preserve the product’s “infrastructure with clarity” feeling
+
 ## Other Works
 
 | Repo | Role |
