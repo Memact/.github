@@ -6,9 +6,7 @@
 Understand what users are trying to do.
 ```
 
-Memact is infrastructure that helps apps predict user intent from approved digital activity, without giving them raw access to a user's private data.
-
-It is not a chatbot wrapper. It is not a generic memory plugin. It is an access-controlled intent layer that other apps can build on.
+Memact helps apps predict user intent from approved digital activity, without giving them raw access to a user's private data.
 
 ## What Memact Does
 
@@ -18,7 +16,7 @@ Memact turns approved digital activity into structured intent signals:
 approved activity -> evidence -> schemas -> memory -> intent signals
 ```
 
-A Memact app can ask for scoped permissions such as:
+Apps request scoped permissions such as:
 
 ```text
 capture:webpage
@@ -29,18 +27,11 @@ memory:read_graph
 graph:write
 ```
 
-The user can approve or reject what the app gets.
-
-Apps can also be limited to activity categories such as news, research pages, media context, AI conversations, developer work, or documents.
+Users choose which scopes and activity categories each app can use. Categories keep access narrow: news, research pages, media context, AI conversations, developer work, documents, and other approved activity types.
 
 ## Why This Exists
 
-Most app-context systems collapse into one of two bad shapes:
-
-1. everything is trapped inside one chatbot or platform
-2. apps get too much private context without clear permission boundaries
-
-Memact is the opposite shape: intent infrastructure with scoped access.
+Apps often need context to help users well. The bad version is a raw private-data feed. Memact takes the other route: approved activity, scoped access, evidence trails, and intent hypotheses instead of blanket graph access.
 
 Example apps built on Memact could ask:
 
@@ -68,7 +59,7 @@ User flow:
 2. The app requests scopes and activity categories.
 3. The user reviews the Connect App permission screen.
 4. Access checks API key, consent, scopes, and categories.
-5. Capture keeps useful allowed evidence and skips sensitive activity.
+5. Capture keeps useful approved evidence and skips sensitive activity.
 6. Inference decides what becomes retained nodes and edges.
 7. Schema forms schema packets from repeated meaningful activity.
 8. Memory stores what survives and exposes only permitted summaries, evidence, or graph objects.
@@ -126,8 +117,7 @@ Memact should feel like infrastructure with clarity.
 
 Avoid:
 
-- AI hype language
-- fake AGI claims
+- hype language
 - generic SaaS landing-page clutter
 - random decorative color drift
 - open-source wording for source-available repos
