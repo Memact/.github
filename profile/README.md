@@ -3,12 +3,12 @@
 **Personalization made better**  
 **with Memact**
 
-Memact helps apps personalize better with context users control.
+Memact is a playground where apps personalize based on what users choose to share.
 
 ## What Memact Does
 
 Apps and sites can send user-approved signals to Memact. Memact turns those
-signals into useful context, stores what matters, and lets apps and users use
+signals into useful memory, stores what matters, and lets apps and users use
 features through scoped API access.
 
 The browser extension is optional. Apps can use Memact through the SDK/API
@@ -24,7 +24,7 @@ Access -> Capture -> Inference -> Schema -> Memory -> Studio features -> Apps an
 - Capture records useful digital activity as evidence.
 - Inference understands that evidence semantically and filters low-signal activity.
 - Schema organizes semantic evidence into cognitive-style schema packets.
-- Memory stores useful context locally, with future room for user-owned cloud storage.
+- Memory stores useful user memory locally, with future room for user-owned cloud storage.
 - Studio is the open-source feature space for Memact features.
 - Website is the portal for users, developers, and apps.
 
@@ -37,7 +37,7 @@ Access -> Capture -> Inference -> Schema -> Memory -> Studio features -> Apps an
 | [Capture](https://github.com/Memact/Capture) | App/site signals, optional extension/local helper, imports, and capture events. |
 | [Inference](https://github.com/Memact/Inference) | Turns capture events into semantic records. |
 | [Schema](https://github.com/Memact/Schema) | Organizes semantic records into schema packets for features. |
-| [Memory](https://github.com/Memact/Memory) | Stores retained context, schema packets, feature outputs, corrections, and forgetting records. |
+| [Memory](https://github.com/Memact/Memory) | Stores retained memory, schema packets, feature outputs, corrections, and forgetting records. |
 | [Contracts](https://github.com/Memact/Contracts) | Shared data shapes behind SDK, backend, and features. |
 | [SDK](https://github.com/Memact/SDK) | Developer kit apps and sites use to send signals and run features. |
 | [Studio](https://github.com/Memact/Studio) | Open-source feature runtime and community feature library. |
@@ -50,7 +50,7 @@ as feature folders, constrained by the SDK and Contracts.
 
 Examples:
 
-- User Context Wiki
+- User Memory Wiki
 - Cognitive Load
 - Research Map
 
@@ -67,10 +67,10 @@ Intent is archived and is not part of the current core flow.
 
 Use:
 
-- “Personalization made better with Memact.”
-- “Memact helps apps personalize better with context users control.”
-- “Users choose what each app can use.”
-- “Apps send signals and use features through scoped API access.”
+- "Personalization made better with Memact."
+- "Memact is a playground where apps personalize based on what users choose to share."
+- "Users choose what each app can use."
+- "Apps send signals and use features through scoped API access."
 
 Avoid:
 
@@ -78,4 +78,4 @@ Avoid:
 - venture-pitch filler
 - intent-first positioning
 - claims that Memact is only a browser extension
-- claims that Memact is only a user-context wiki
+- claims that Memact is only a user memory wiki
