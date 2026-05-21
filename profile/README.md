@@ -5,6 +5,12 @@
 
 Memact is a playground where apps personalize based on what users choose to share.
 
+[![Website](https://img.shields.io/badge/Website-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Website)
+[![Access](https://img.shields.io/badge/Access-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Access)
+[![Capture](https://img.shields.io/badge/Capture-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Capture)
+[![Extension](https://img.shields.io/badge/Extension-00011B?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/Memact/Extension)
+[![Studio](https://img.shields.io/badge/Studio-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Studio)
+
 ## What Memact Does
 
 Apps and sites can send user-approved signals to Memact. Memact turns those
@@ -32,16 +38,17 @@ Access -> Capture -> Inference -> Schema -> Memory -> Studio features -> Apps an
 
 | Repo | Role |
 | --- | --- |
-| [Website](https://github.com/Memact/Website) | Public site and portal. |
-| [Access](https://github.com/Memact/Access) | Permissions, apps, API keys, consent, capture ingestion checks, feature access, audit, and usage. |
-| [Capture](https://github.com/Memact/Capture) | App/site signals, optional extension/local helper, imports, and capture events. |
-| [Inference](https://github.com/Memact/Inference) | Turns capture events into semantic records. |
-| [Schema](https://github.com/Memact/Schema) | Organizes semantic records into schema packets for features. |
-| [Memory](https://github.com/Memact/Memory) | Stores retained memory, schema packets, feature outputs, corrections, and forgetting records. |
-| [Contracts](https://github.com/Memact/Contracts) | Shared data shapes behind SDK, backend, and features. |
-| [SDK](https://github.com/Memact/SDK) | Developer kit apps and sites use to send signals and run features. |
-| [Studio](https://github.com/Memact/Studio) | Open-source feature runtime and community feature library. |
-| [AutoMod](https://github.com/Memact/AutoMod) | Separate community/server ops bot. |
+| [![Website](https://img.shields.io/badge/Website-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Website) | Public site and portal. |
+| [![Access](https://img.shields.io/badge/Access-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Access) | Permissions, apps, API keys, consent, capture ingestion checks, feature access, audit, and usage. |
+| [![Capture](https://img.shields.io/badge/Capture-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Capture) | App/site signals, imports, and capture events. |
+| [![Extension](https://img.shields.io/badge/Extension-00011B?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/Memact/Extension) | Optional browser extension for local capture. |
+| [![Inference](https://img.shields.io/badge/Inference-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Inference) | Turns capture events into semantic records. |
+| [![Schema](https://img.shields.io/badge/Schema-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Schema) | Organizes semantic records into schema packets for features. |
+| [![Memory](https://img.shields.io/badge/Memory-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Memory) | Stores retained memory, schema packets, feature outputs, corrections, and forgetting records. |
+| [![Contracts](https://img.shields.io/badge/Contracts-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Contracts) | Shared data shapes behind SDK, backend, and features. |
+| [![SDK](https://img.shields.io/badge/SDK-00011B?style=for-the-badge&logo=npm&logoColor=white)](https://github.com/Memact/SDK) | Developer kit apps and sites use to send signals and run features. |
+| [![Studio](https://img.shields.io/badge/Studio-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Studio) | Open-source feature runtime and community feature library. |
+| [![AutoMod](https://img.shields.io/badge/AutoMod-00011B?style=for-the-badge&logo=discord&logoColor=white)](https://github.com/Memact/AutoMod) | Separate community/server ops bot. |
 
 ## Studio
 
