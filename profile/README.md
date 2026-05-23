@@ -3,7 +3,7 @@
 **Personalization made better**  
 **with Memact**
 
-Memact is a playground where apps personalize based on what users choose to share.
+Memact is a playground where apps personalize around what users choose.
 
 ## What Memact Does
 
