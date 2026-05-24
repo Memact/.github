@@ -36,7 +36,6 @@ Access -> Wiki -> Schema -> Memory -> SDK -> Apps
 | [![Memory](https://img.shields.io/badge/Memory-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Memory) | Stores accepted Wiki context, history, retrieval, and app-safe summaries. |
 | [![Contracts](https://img.shields.io/badge/Contracts-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Contracts) | Shared data shapes for Wiki, category schemas, access, memory, and SDK. |
 | [![SDK](https://img.shields.io/badge/SDK-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/SDK) | Developer kit for apps to connect, propose context, and read allowed category memory. |
-| [![Extension](https://img.shields.io/badge/Extension-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Extension) | Optional browser extension for local capture experiments. |
 | [![AutoMod](https://img.shields.io/badge/AutoMod-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/AutoMod) | Separate community/server ops bot. |
 
 ## Open Source
@@ -50,6 +49,7 @@ The main contribution path is Schema: pick an app category and define what conte
 | Repo | Status |
 | --- | --- |
 | [![Capture](https://img.shields.io/badge/Capture-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Capture) | Archived capture pipeline experiment. |
+| [![Extension](https://img.shields.io/badge/Extension-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Extension) | Archived optional browser extension experiment. |
 | [![Inference](https://img.shields.io/badge/Inference-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Inference) | Archived semantic-inference experiment. |
 | [![Playground](https://img.shields.io/badge/Playground-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Playground) | Archived feature-runtime experiment. |
 | [![Intent](https://img.shields.io/badge/Intent-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Intent) | Archived old intent-prediction direction. |
