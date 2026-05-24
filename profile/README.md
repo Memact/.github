@@ -4,9 +4,6 @@
 
 # Memact
 
-**Personalization made better**  
-**with Memact**
-
 Memact is a playground where apps personalize around what users choose.
 
 Apps send context. App categories give it shape. Wiki gives users control. Memory stores what survives.
