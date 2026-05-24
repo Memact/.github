@@ -1,0 +1,49 @@
+<svg width="1200" height="360" viewBox="0 0 1200 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Memact animated profile banner</title>
+  <desc id="desc">Memact wordmark transitions into the tagline Personalization made better with Memact.</desc>
+
+  <rect width="1200" height="360" rx="34" fill="#00011B"/>
+  <rect x="1" y="1" width="1198" height="358" rx="33" stroke="rgba(255,255,255,0.14)" stroke-width="2"/>
+
+  <g opacity="0.56">
+    <path d="M0 286C192 254 371 320 574 278C747 242 915 251 1200 210V360H0V286Z" fill="#101126">
+      <animate attributeName="d" dur="9s" repeatCount="indefinite"
+        values="M0 286C192 254 371 320 574 278C747 242 915 251 1200 210V360H0V286Z;
+                M0 270C214 308 396 246 585 285C770 324 980 244 1200 270V360H0V270Z;
+                M0 286C192 254 371 320 574 278C747 242 915 251 1200 210V360H0V286Z"/>
+    </path>
+  </g>
+
+  <g transform="translate(600 94)" text-anchor="middle">
+    <text y="0" fill="#FFFFFF" font-family="Arial Black, Arial, sans-serif" font-size="58" font-weight="900" letter-spacing="-2">
+      memact
+      <animate attributeName="opacity" dur="5.6s" repeatCount="indefinite" values="0;1;1;0.88;1"/>
+      <animateTransform attributeName="transform" type="translate" dur="5.6s" repeatCount="indefinite" values="0 10;0 0;0 0;0 -2;0 0"/>
+    </text>
+    <rect x="-156" y="26" width="312" height="4" rx="2" fill="#FFFFFF" opacity="0.74">
+      <animate attributeName="width" dur="5.6s" repeatCount="indefinite" values="0;312;312;250;312"/>
+      <animate attributeName="x" dur="5.6s" repeatCount="indefinite" values="0;-156;-156;-125;-156"/>
+    </rect>
+  </g>
+
+  <g transform="translate(600 205)" text-anchor="middle">
+    <text y="0" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="50" font-weight="900" letter-spacing="-2">
+      Personalization made better
+      <animate attributeName="opacity" dur="6.2s" repeatCount="indefinite" values="0;0;1;1;1"/>
+      <animateTransform attributeName="transform" type="translate" dur="6.2s" repeatCount="indefinite" values="0 14;0 14;0 0;0 0;0 0"/>
+    </text>
+    <text y="58" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="34" font-weight="850" letter-spacing="-1">
+      with Memact
+      <animate attributeName="opacity" dur="6.2s" repeatCount="indefinite" values="0;0;0.2;1;1"/>
+      <animateTransform attributeName="transform" type="translate" dur="6.2s" repeatCount="indefinite" values="0 12;0 12;0 6;0 0;0 0"/>
+    </text>
+  </g>
+
+  <g transform="translate(284 304)">
+    <rect width="632" height="44" rx="22" fill="#15162D" stroke="rgba(255,255,255,0.16)"/>
+    <text x="316" y="28" text-anchor="middle" fill="rgba(255,255,255,0.72)" font-family="Arial, sans-serif" font-size="17" font-weight="700">
+      Apps bring context. Users control memory. Apps personalize better.
+    </text>
+    <animate attributeName="opacity" dur="7s" repeatCount="indefinite" values="0.45;1;1;0.72;0.45"/>
+  </g>
+</svg>

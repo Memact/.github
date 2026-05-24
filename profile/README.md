@@ -1,17 +1,15 @@
+<p align="center">
+  <img src="./assets/memact-readme.svg" alt="Memact - Personalization made better with Memact" width="100%" />
+</p>
+
 # Memact
 
 **Personalization made better**  
 **with Memact**
 
-Memact is a user-controlled context layer for app personalization.
+Memact is a playground where apps personalize around what users choose.
 
-Apps send context. App categories give it shape. Wiki gives users control.
-
-## What Memact Does
-
-Apps can propose or send user context to Memact. App category schemas shape that context, Wiki lets the user review and control it, and Memory stores accepted context for safe reuse.
-
-The browser extension is optional. Apps can use Memact through the SDK/API without it.
+Apps send context. App categories give it shape. Wiki gives users control. Memory stores what survives.
 
 ## Core Flow
 
@@ -20,7 +18,7 @@ Access -> Wiki -> Schema -> Memory -> SDK -> Apps
 ```
 
 - Access handles consent, apps, API keys, scopes, and permissions.
-- Wiki is the user-controlled context layer where users and apps build editable memory.
+- Wiki is the user-controlled page where users and apps build editable memory.
 - Schema defines open-source app category schemas that give app context shape.
 - Memory stores accepted Wiki context, history, retrieval, and app-safe summaries.
 - Contracts defines shared data shapes.
@@ -33,7 +31,7 @@ Access -> Wiki -> Schema -> Memory -> SDK -> Apps
 | --- | --- |
 | [![Website](https://img.shields.io/badge/Website-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Website) | Portal for users and developers. |
 | [![Access](https://img.shields.io/badge/Access-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Access) | Consent, apps, API keys, scopes, and permissions. |
-| [![Wiki](https://img.shields.io/badge/Wiki-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Wiki) | User-controlled context layer where users and apps build editable memory. |
+| [![Wiki](https://img.shields.io/badge/Wiki-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Wiki) | User-controlled page where users and apps build editable memory. |
 | [![Schema](https://img.shields.io/badge/Schema-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Schema) | Open-source app category schemas that give app context shape. |
 | [![Memory](https://img.shields.io/badge/Memory-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Memory) | Stores accepted Wiki context, history, retrieval, and app-safe summaries. |
 | [![Contracts](https://img.shields.io/badge/Contracts-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Contracts) | Shared data shapes for Wiki, category schemas, access, memory, and SDK. |
