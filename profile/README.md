@@ -3,62 +3,58 @@
 **Personalization made better**  
 **with Memact**
 
-Memact is a playground where apps personalize around what users choose.
+Memact is a user-controlled context layer for app personalization.
+
+Apps send context. App categories give it shape. Wiki gives users control.
 
 ## What Memact Does
 
-Apps and sites can send user-approved signals to Memact. Memact turns those signals into useful memory, stores what matters, and lets apps and users use features through scoped API access.
+Apps can propose or send user context to Memact. App category schemas shape that context, Wiki lets the user review and control it, and Memory stores accepted context for safe reuse.
 
 The browser extension is optional. Apps can use Memact through the SDK/API without it.
 
 ## Core Flow
 
 ```text
-Access -> Capture -> Inference -> Schema -> Memory -> Playground features -> Apps and users
+Access -> Wiki -> Schema -> Memory -> SDK -> Apps
 ```
 
-- Access checks permission, apps, API keys, consent, scopes, categories, and usage.
-- Capture records useful digital activity as evidence.
-- Inference understands that evidence semantically and filters low-signal activity.
-- Schema organizes semantic evidence into cognitive-style schema packets.
-- Memory stores useful user memory locally, with future room for user-owned cloud storage.
-- Wiki is the user-controlled memory surface.
-- Playground is the open-source feature space for Memact features.
-- Website is the portal for users, developers, and apps.
+- Access handles consent, apps, API keys, scopes, and permissions.
+- Wiki is the user-controlled context layer where users and apps build editable memory.
+- Schema defines open-source app category schemas that give app context shape.
+- Memory stores accepted Wiki context, history, retrieval, and app-safe summaries.
+- Contracts defines shared data shapes.
+- SDK helps apps connect to Memact, propose context, and read allowed category memory.
+- Website is the portal for users and developers.
 
 ## Repos
 
 | Repo | Role |
 | --- | --- |
-| [![Website](https://img.shields.io/badge/Website-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Website) | Public site and portal. |
-| [![Access](https://img.shields.io/badge/Access-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Access) | Permissions, apps, API keys, consent, capture ingestion checks, feature access, audit, and usage. |
-| [![Capture](https://img.shields.io/badge/Capture-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Capture) | App/site signals, imports, and capture events. |
-| [![Extension](https://img.shields.io/badge/Extension-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Extension) | Optional browser extension for local capture. |
-| [![Inference](https://img.shields.io/badge/Inference-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Inference) | Turns capture events into semantic records. |
-| [![Schema](https://img.shields.io/badge/Schema-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Schema) | Organizes semantic records into schema packets for features. |
-| [![Memory](https://img.shields.io/badge/Memory-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Memory) | Stores retained memory, schema packets, feature outputs, corrections, and forgetting records. |
-| [![Wiki](https://img.shields.io/badge/Wiki-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Wiki) | User-controlled memory surface with provenance, history, visibility, and proposals. |
-| [![Contracts](https://img.shields.io/badge/Contracts-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Contracts) | Shared data shapes behind SDK, backend, and features. |
-| [![SDK](https://img.shields.io/badge/SDK-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/SDK) | Developer kit apps and sites use to send signals and run features. |
-| [![Playground](https://img.shields.io/badge/Playground-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Playground) | Open-source feature runtime and community feature library. |
+| [![Website](https://img.shields.io/badge/Website-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Website) | Portal for users and developers. |
+| [![Access](https://img.shields.io/badge/Access-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Access) | Consent, apps, API keys, scopes, and permissions. |
+| [![Wiki](https://img.shields.io/badge/Wiki-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Wiki) | User-controlled context layer where users and apps build editable memory. |
+| [![Schema](https://img.shields.io/badge/Schema-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Schema) | Open-source app category schemas that give app context shape. |
+| [![Memory](https://img.shields.io/badge/Memory-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Memory) | Stores accepted Wiki context, history, retrieval, and app-safe summaries. |
+| [![Contracts](https://img.shields.io/badge/Contracts-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Contracts) | Shared data shapes for Wiki, category schemas, access, memory, and SDK. |
+| [![SDK](https://img.shields.io/badge/SDK-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/SDK) | Developer kit for apps to connect, propose context, and read allowed category memory. |
+| [![Extension](https://img.shields.io/badge/Extension-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Extension) | Optional browser extension for local capture experiments. |
 | [![AutoMod](https://img.shields.io/badge/AutoMod-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/AutoMod) | Separate community/server ops bot. |
 
-## Playground
+## Open Source
 
-Playground is Apache-2.0 open source. Contributors can add features by pull request as feature folders, constrained by the SDK and Contracts.
+Open-source contributors mainly work on Schema, Contracts, and SDK.
 
-Examples:
-
-- User Memory Wiki
-- Cognitive Load
-- Research Map
-- Adaptive Article Overview
+The main contribution path is Schema: pick an app category and define what context matters, how apps can propose it, how users can edit it, and what apps can safely use.
 
 ## Archived
 
 | Repo | Status |
 | --- | --- |
+| [![Capture](https://img.shields.io/badge/Capture-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Capture) | Archived capture pipeline experiment. |
+| [![Inference](https://img.shields.io/badge/Inference-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Inference) | Archived semantic-inference experiment. |
+| [![Playground](https://img.shields.io/badge/Playground-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Playground) | Archived feature-runtime experiment. |
+| [![Intent](https://img.shields.io/badge/Intent-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Intent) | Archived old intent-prediction direction. |
 | [![LandingPage](https://img.shields.io/badge/LandingPage-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/LandingPage) | Archived old landing page. |
 | [![Influence](https://img.shields.io/badge/Influence-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Influence) | Archived early feature experiment. |
 | [![Origin](https://img.shields.io/badge/Origin-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Origin) | Archived early feature experiment. |
-| [![Intent](https://img.shields.io/badge/Intent-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Intent) | Archived old intent-prediction direction. |
