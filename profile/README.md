@@ -54,4 +54,4 @@ The main contribution path is Schema: pick an app category and define what conte
 
 ## Original concept
 
-[![Reddit](https://img.shields.io/badge/REDDIT-00011B?style=for-the-badge&logo=reddit&logoColor=white)](https://www.reddit.com/r/projects/s/MpCDNpb123)
+[![Reddit](https://img.shields.io/badge/REDDIT-FF4500?style=for-the-badge&logo=reddit&logoColor=white)](https://www.reddit.com/r/projects/s/MpCDNpb123)
