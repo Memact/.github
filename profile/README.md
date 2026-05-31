@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Memact/.github/main/profile/assets/memact-readme.svg?v=2" alt="Memact - Personalization made better with Memact" width="100%" />
+  <img src="https://raw.githubusercontent.com/Memact/.github/main/profile/assets/memact-readme.svg?v=2" alt="Memact - Personalization made better" width="100%" />
 </p>
 
 # Memact
