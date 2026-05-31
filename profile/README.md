@@ -4,9 +4,7 @@
 
 # Memact
 
-Memact is a playground where apps personalize around what users choose.
-
-Apps send context. App categories give it shape. Wiki gives users control. Memory stores what survives.
+Memact is a place where you can finally see what apps know about you.
 
 ## Core Flow
 
