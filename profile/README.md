@@ -51,3 +51,8 @@ The main contribution path is Schema: pick an app category and define what conte
 | [![LandingPage](https://img.shields.io/badge/LandingPage-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/LandingPage) | Archived old landing page. |
 | [![Influence](https://img.shields.io/badge/Influence-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Influence) | Archived early feature experiment. |
 | [![Origin](https://img.shields.io/badge/Origin-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Origin) | Archived early feature experiment. |
+
+## Want the original idea?
+
+I first wrote about the concept here: 
+[![Reddit](https://img.shields.io/badge/Reddit-Original%20Concept-FF4500?style=for-the-badge&logo=reddit&logoColor=white)](https://www.reddit.com/r/projects/s/MpCDNpb123) 
