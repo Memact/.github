@@ -29,6 +29,26 @@ The Schema repo also has a handoff note here:
 
 Read that before starting a Schema issue.
 
+## License split
+
+Memact uses a mixed license model.
+
+Open contribution and interface repos are Apache-2.0:
+
+- Schema
+- Contracts
+- SDK
+- .github
+
+Product/runtime repos are source-available under BUSL-1.1 for commercial control:
+
+- Wiki
+- Access
+- Memory
+- Website
+
+This means the best SSoC26 starting repos are Schema, Contracts, and SDK. Wiki, Access, Memory, and Website may have scoped issues, but they are not the primary beginner path and may have different license terms.
+
 ## Active contribution areas
 
 ### Schema
@@ -76,6 +96,8 @@ Good contributions include:
 
 Owns the user-facing control surface.
 
+Wiki is source-available under BUSL-1.1. SSoC26 contributors may work on clearly scoped docs/spec/copy issues, but primary open contribution happens in Schema, Contracts, and SDK.
+
 Good contributions include:
 
 - proposed / accepted / rejected / deleted entry states
@@ -86,6 +108,8 @@ Good contributions include:
 ### Memory
 
 Stores accepted user context after Wiki review.
+
+Memory is source-available under BUSL-1.1 and is not the main beginner path.
 
 Good contributions include:
 
@@ -99,7 +123,7 @@ Good contributions include:
 
 Handles consent, apps, API keys, scopes, and permissions.
 
-This is advanced. Please do not start here unless the issue is clearly scoped.
+Access is source-available under BUSL-1.1 and is advanced. Please do not start here unless the issue is clearly scoped.
 
 ## Repos that are not current contribution targets
 
