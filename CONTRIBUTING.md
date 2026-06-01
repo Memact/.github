@@ -2,13 +2,13 @@
 
 Thanks for contributing to Memact.
 
-Memact lets users see, edit, and control what apps think they know about them. Apps can propose context, but users decide what becomes accepted memory.
+Memact lets users see, edit, and control what apps think they know about them. Apps may send raw signals or propose context directly. Users decide what becomes accepted memory.
 
 ## Start here
 
 If you are new, start with Schema issues.
 
-Schema work is the easiest way to contribute because you can pick an app category you understand and define how messy app activity should become user-readable, editable context.
+Schema work is the easiest way to contribute because you can pick an app category you understand and define how messy app activity becomes user-readable, editable context.
 
 Good first categories include:
 
@@ -58,7 +58,7 @@ Defines app category schemas.
 Contributors can add:
 
 - useful context fields
-- raw app context examples
+- raw app signal examples
 - normalized context examples
 - user-facing Wiki entry templates
 - simple normalization rules
@@ -132,7 +132,7 @@ Some older repos are archived or represent older product directions. Do not revi
 The current product language is:
 
 ```text
-Apps send context. Categories give it shape. Wiki gives users control. Memory stores what survives.
+Apps may send raw signals or propose context directly. Schema gives that input meaning. Wiki lets users review it. Memory stores what the user accepts.
 ```
 
 ## How to claim an issue
@@ -159,14 +159,14 @@ Apps send context. Categories give it shape. Wiki gives users control. Memory st
 When adding a category schema, include:
 
 - useful context fields
-- raw input examples
-- normalized output examples
+- raw signal examples
+- normalized context examples
 - Wiki entry examples
 - fields that require extra care
 - suggested permissions
 - tests
 
-Remember: apps propose context. Users control whether it becomes accepted memory.
+Remember: apps may send rough signals or clean context, but users control whether anything becomes memory.
 
 ## Maintainer review priorities
 
