@@ -2,7 +2,7 @@
 
 Thanks for contributing to Memact.
 
-Memact lets users see, edit, and control what apps think they know about them. Apps may send raw signals or propose context directly. Users decide what becomes accepted memory.
+Memact lets users see, edit, and control what apps think they know about them. Apps may send app activity records or propose context directly. Users decide what becomes accepted memory.
 
 ## Start here
 
@@ -28,6 +28,14 @@ The Schema repo also has a handoff note here:
 - `Memact/Schema/MEMACT.md`
 
 Read that before starting a Schema issue.
+
+## Core rule
+
+Activity is not identity.
+
+A read, click, order, replay, skip, save, search, export, or setting change can be useful evidence. It should not automatically become a stable fact about the user.
+
+Repeated patterns can support proposed context. One-off activity, curiosity, research, shared usage, trending events, and temporary needs should stay weak, temporary, or low-confidence.
 
 ## License split
 
@@ -58,7 +66,7 @@ Defines app category schemas.
 Contributors can add:
 
 - useful context fields
-- raw app signal examples
+- app activity examples
 - normalized context examples
 - user-facing Wiki entry templates
 - simple normalization rules
@@ -132,7 +140,7 @@ Some older repos are archived or represent older product directions. Do not revi
 The current product language is:
 
 ```text
-Apps may send raw signals or propose context directly. Schema gives that input meaning. Wiki lets users review it. Memory stores what the user accepts.
+Apps may send app activity records or propose context directly. Schema defines the category and safe context shape. Wiki lets users review it. Memory stores what the user accepts.
 ```
 
 ## How to claim an issue
@@ -159,14 +167,14 @@ Apps may send raw signals or propose context directly. Schema gives that input m
 When adding a category schema, include:
 
 - useful context fields
-- raw signal examples
+- app activity examples
 - normalized context examples
 - Wiki entry examples
 - fields that require extra care
 - suggested permissions
 - tests
 
-Remember: apps may send rough signals or clean context, but users control whether anything becomes memory.
+Remember: apps may send rough activity or clean context, but users control whether anything becomes memory.
 
 ## Maintainer review priorities
 
