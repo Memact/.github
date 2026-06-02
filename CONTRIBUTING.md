@@ -6,9 +6,11 @@ Memact lets users see, edit, and control what apps think they know about them. A
 
 ## Start here
 
-If you are new, start with Schema issues.
+If you are new, start with Context issues.
 
-Schema work is the easiest way to contribute because you can pick an app category you understand and define how messy app activity becomes user-readable, editable context.
+Context work is the easiest way to contribute because you can pick an app category you understand and define how messy app activity becomes user-readable, editable context.
+
+Context was formerly called Schema. Older issues and PRs may still use the old name.
 
 Good first categories include:
 
@@ -23,11 +25,11 @@ Good first categories include:
 - news-articles
 - creator-tools
 
-The Schema repo also has a handoff note here:
+The Context repo also has a handoff note here:
 
-- `Memact/Schema/MEMACT.md`
+- `Memact/Context/MEMACT.md`
 
-Read that before starting a Schema issue.
+Read that before starting a Context issue.
 
 ## Core rule
 
@@ -43,7 +45,7 @@ Memact uses a mixed license model.
 
 Open contribution and interface repos are Apache-2.0:
 
-- Schema
+- Context
 - Contracts
 - SDK
 - .github
@@ -55,13 +57,13 @@ Product/runtime repos are source-available under BUSL-1.1 for commercial control
 - Memory
 - Website
 
-This means the best SSoC26 starting repos are Schema, Contracts, and SDK. Wiki, Access, Memory, and Website may have scoped issues, but they are not the primary beginner path and may have different license terms.
+This means the best SSoC26 starting repos are Context, Contracts, and SDK. Wiki, Access, Memory, and Website may have scoped issues, but they are not the primary beginner path and may have different license terms.
 
 ## Active contribution areas
 
-### Schema
+### Context
 
-Defines app category schemas.
+Defines app category rules that turn app signals into Wiki-ready context proposals.
 
 Contributors can add:
 
@@ -104,7 +106,7 @@ Good contributions include:
 
 Owns the user-facing control surface.
 
-Wiki is source-available under BUSL-1.1. SSoC26 contributors may work on clearly scoped docs/spec/copy issues, but primary open contribution happens in Schema, Contracts, and SDK.
+Wiki is source-available under BUSL-1.1. SSoC26 contributors may work on clearly scoped docs/spec/copy issues, but primary open contribution happens in Context, Contracts, and SDK.
 
 Good contributions include:
 
@@ -140,7 +142,7 @@ Some older repos are archived or represent older product directions. Do not revi
 The current product language is:
 
 ```text
-Apps may send app activity records or propose context directly. Schema defines the category and safe context shape. Wiki lets users review it. Memory stores what the user accepts.
+Apps may send app activity records or propose context directly. Context defines the category and safe context shape. Wiki lets users review it. Memory stores what the user accepts.
 ```
 
 ## How to claim an issue
@@ -162,9 +164,9 @@ Apps may send app activity records or propose context directly. Schema defines t
 - Do not write fake certainty.
 - Keep user-facing copy simple.
 
-## Schema contribution rules
+## Context contribution rules
 
-When adding a category schema, include:
+When adding a category, include:
 
 - useful context fields
 - app activity examples

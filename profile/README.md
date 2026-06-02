@@ -9,12 +9,12 @@ Memact is a place where you can finally see what apps know about you.
 ## Core Flow
 
 ```text
-Access -> Wiki -> Schema -> Memory -> SDK -> Apps
+Access -> Wiki -> Context -> Memory -> SDK -> Apps
 ```
 
 - Access handles consent, apps, API keys, scopes, and permissions.
 - Wiki is the user-controlled page where users and apps build editable memory.
-- Schema defines open-source app category schemas that give app context shape.
+- Context defines open-source app category rules that turn app signals into Wiki-ready proposals.
 - Memory stores accepted Wiki context, history, retrieval, and app-safe summaries.
 - Contracts defines shared data shapes.
 - SDK helps apps connect to Memact, propose context, and read allowed category memory.
@@ -27,17 +27,17 @@ Access -> Wiki -> Schema -> Memory -> SDK -> Apps
 | [![Website](https://img.shields.io/badge/Website-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Website) | Portal for users and developers. |
 | [![Access](https://img.shields.io/badge/Access-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Access) | Consent, apps, API keys, scopes, and permissions. |
 | [![Wiki](https://img.shields.io/badge/Wiki-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Wiki) | User-controlled page where users and apps build editable memory. |
-| [![Schema](https://img.shields.io/badge/Schema-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Schema) | Open-source app category schemas that give app context shape. |
+| [![Context](https://img.shields.io/badge/Context-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Context) | Open-source app category rules that turn app signals into Wiki-ready proposals. Formerly Schema. |
 | [![Memory](https://img.shields.io/badge/Memory-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Memory) | Stores accepted Wiki context, history, retrieval, and app-safe summaries. |
-| [![Contracts](https://img.shields.io/badge/Contracts-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Contracts) | Shared data shapes for Wiki, category schemas, access, memory, and SDK. |
+| [![Contracts](https://img.shields.io/badge/Contracts-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Contracts) | Shared data shapes for Wiki, category context, access, memory, and SDK. |
 | [![SDK](https://img.shields.io/badge/SDK-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/SDK) | Developer kit for apps to connect, propose context, and read allowed category memory. |
 | [![AutoMod](https://img.shields.io/badge/AutoMod-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/AutoMod) | Separate community/server ops bot. |
 
 ## Open Source
 
-Open-source contributors mainly work on Schema, Contracts, and SDK.
+Open-source contributors mainly work on Context, Contracts, and SDK.
 
-The main contribution path is Schema: pick an app category and define what context matters, how apps can propose it, how users can edit it, and what apps can safely use.
+The main contribution path is Context: pick an app category and define what context matters, how apps can propose it, how users can edit it, and what apps can safely use.
 
 ## Archived
 
