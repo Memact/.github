@@ -2,13 +2,13 @@
 
 Thanks for contributing to Memact.
 
-Memact lets users see, edit, and control what apps think they know about them. Apps may send app activity records or propose context directly. Users decide what becomes accepted memory.
+Memact lets users see, edit, and control what apps think they know about them. Apps may send app activity records or suggest memory directly. Users decide what becomes accepted memory.
 
 ## Start here
 
 If you are new, start with Context issues.
 
-Context work is the easiest way to contribute because you can pick an app category you understand and define how messy app activity becomes user-readable, editable context.
+Context work is the easiest way to contribute because you can pick an app category you understand and define how messy app activity becomes user-readable, editable memory.
 
 Context was formerly called Schema. Older issues and PRs may still use the old name.
 
@@ -37,7 +37,7 @@ Activity is not identity.
 
 A read, click, order, replay, skip, save, search, export, or setting change can be useful evidence. It should not automatically become a stable fact about the user.
 
-Repeated patterns can support proposed context. One-off activity, curiosity, research, shared usage, trending events, and temporary needs should stay weak, temporary, or low-confidence.
+Repeated patterns can support a memory suggestion. One-off activity, curiosity, research, shared usage, trending events, and temporary needs should stay weak, temporary, or low-confidence.
 
 ## License split
 
@@ -63,18 +63,18 @@ This means the best SSoC26 starting repos are Context, Contracts, and SDK. Wiki,
 
 ### Context
 
-Defines app category rules that turn app signals into Wiki-ready context proposals.
+Defines app category rules that turn app input into Wiki-ready memory suggestions.
 
 Contributors can add:
 
-- useful context fields
+- useful memory fields
 - app activity examples
-- normalized context examples
+- normalized memory examples
 - user-facing Wiki entry templates
 - simple normalization rules
-- prompts for missing context
+- prompts for missing memory
 - permission suggestions
-- tests for safe context shaping
+- tests for safe memory shaping
 
 This is the main beginner-friendly contribution path.
 
@@ -117,7 +117,7 @@ Good contributions include:
 
 ### Memory
 
-Stores accepted user context after Wiki review.
+Stores accepted user memory after Wiki review.
 
 Memory is source-available under BUSL-1.1 and is not the main beginner path.
 
@@ -142,7 +142,7 @@ Some older repos are archived or represent older product directions. Do not revi
 The current product language is:
 
 ```text
-Apps may send app activity records or propose context directly. Context defines the category and safe context shape. Wiki lets users review it. Memory stores what the user accepts.
+Apps may send app activity records or suggest memory directly. Context defines the category and safe memory shape. Wiki lets users review it. Memory stores what the user accepts.
 ```
 
 ## How to claim an issue

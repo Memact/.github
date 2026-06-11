@@ -1,6 +1,6 @@
 <svg width="1200" height="360" viewBox="0 0 1200 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">Memact profile banner</title>
-  <desc id="desc">Memact logo with the tagline Personalization made better with Memact.</desc>
+  <desc id="desc">Memact logo with the tagline Your Identity. Your Choice.</desc>
 
   <rect width="1200" height="360" rx="34" fill="#00011B"/>
   <rect x="1" y="1" width="1198" height="358" rx="33" stroke="rgba(255,255,255,0.14)" stroke-width="2"/>
@@ -14,12 +14,12 @@
 
   <g transform="translate(600 198)" text-anchor="middle" font-family="'IBM Plex Sans', 'Segoe UI', Arial, sans-serif">
     <text y="0" fill="#FFFFFF" font-size="66" font-weight="850" letter-spacing="-3.2">
-      Personalization
+      Your Identity.
       <animate attributeName="opacity" dur="3.2s" repeatCount="indefinite" values="0;0.12;1;1;1"/>
       <animateTransform attributeName="transform" type="translate" dur="3.2s" repeatCount="indefinite" values="0 12;0 5;0 0;0 0;0 0"/>
     </text>
     <text y="66" fill="#FFFFFF" font-size="66" font-weight="850" letter-spacing="-3.2">
-      made better
+      Your Choice.
       <animate attributeName="opacity" dur="3.2s" repeatCount="indefinite" values="0;0.12;1;1;1"/>
       <animateTransform attributeName="transform" type="translate" dur="3.2s" repeatCount="indefinite" values="0 12;0 5;0 0;0 0;0 0"/>
     </text>
