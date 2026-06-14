@@ -32,7 +32,7 @@ Memact helps apps:
 ## Spine
 
 ```text
-Access -> Wiki -> Context -> Memory -> SDK -> Apps
+Access -> Notebook -> Context -> Memory -> SDK -> Apps
 ```
 
 Product Loop:
@@ -40,7 +40,7 @@ Product Loop:
 1. App sends or proposes context.
 2. Access checks permission.
 3. Context gives it shape.
-4. Yourself shows it to the user.
+4. Notebook shows it to the user.
 5. User accepts, edits, rejects, or deletes.
 6. Memory stores accepted context.
 7. SDK lets apps read only allowed context.
@@ -51,11 +51,11 @@ Product Loop:
 | Repo | Role |
 | --- | --- |
 | [![Access](https://img.shields.io/badge/-Access-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Access) | Access gateway for app registration, API keys, Connect App consent, and permission checks. |
-| [![Wiki](https://img.shields.io/badge/-Wiki-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Wiki) | Domain model for user-controlled memory governance. |
-| [![Context](https://img.shields.io/badge/-Context-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Schema) | Defines categories, groups, matching helpers, and context shaping. |
+| [![Notebook](https://img.shields.io/badge/-Notebook-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Notebook) | Domain model for user-controlled memory governance. |
+| [![Context](https://img.shields.io/badge/-Context-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Context) | Defines categories, groups, matching helpers, and context shaping. |
 | [![Memory](https://img.shields.io/badge/-Memory-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Memory) | Stores user-approved memory entries under user control. |
 | [![SDK](https://img.shields.io/badge/-SDK-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/SDK) | Server-side integration SDK apps use to query context and suggest memory. |
-| [![Website](https://img.shields.io/badge/-Website-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Website) | Memact Access web UI for sign in, app registration, Yourself settings, and user/developer portals. |
+| [![Website](https://img.shields.io/badge/-Website-00011B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Memact/Website) | Memact Access web UI for sign in, app registration, Notebook settings, and user/developer portals. |
 
 ## Brand and UI Direction
 
