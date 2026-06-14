@@ -158,6 +158,7 @@ Apps may send app activity records or suggest memory directly. Context defines t
 - Keep PRs focused.
 - Reference the issue number in the PR description.
 - Include examples or tests when changing behavior.
+- Add a follow-up comment directly on the PR after opening it so the maintainer receives an immediate notification for a faster review and merge.
 - Do not add secrets, API keys, private tokens, or real user data.
 - Prefer user-readable summaries over raw personal data.
 - Do not infer sensitive traits.
