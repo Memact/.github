@@ -15,6 +15,8 @@ jobs:
   assign-contributors:
     name: Scan & Assign Eager Contributors
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
     steps:
       - name: Checkout .github repo
@@ -25,24 +27,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install GitHub CLI
-        run: |
-          type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
-          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-            | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-          sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] \
-            https://cli.github.com/packages stable main" \
-            | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-          sudo apt update && sudo apt install gh -y
-
-      - name: Authenticate GitHub CLI
-        env:
-          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-        run: echo "$GH_TOKEN" | gh auth login --with-token
-
       - name: Run contributor assignment script
-        env:
-          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           python .github/workflows/scripts/assign_eager_contributors.py
