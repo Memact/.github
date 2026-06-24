@@ -2,8 +2,8 @@ name: Label & Align PRs
 
 on:
   schedule:
-    # Runs every hour at 30 minutes past the hour (UTC) — offset from the other job to avoid conflicts
-    - cron: "30 * * * *"
+    # Runs every 10 minutes
+    - cron: "*/10 * * * *"
   workflow_dispatch: # Allow manual trigger
 
 permissions:
