@@ -186,7 +186,7 @@ for repo in repos:
                         print(f"  [SUCCESS] Assigned Memact/{repo}#{num} to @{target_assignee}")
                         active_assignments[target_assignee.lower()] = active_assignments.get(target_assignee.lower(), 0) + 1
                         # Comment on the issue notifying them
-                        body_msg = f"@[SUCCESS] @{target_assignee} maintainer assignment: this issue is yours for SSoC26! Looking forward to your PR!"
+                        body_msg = f"Hey @{target_assignee} 👋 You've been assigned this issue as part of SSoC26! Looking forward to your PR. Feel free to ask questions if you get stuck. Good luck!"
                         cmd_msg = f'gh issue comment {num} -R Memact/{repo} -b "{body_msg}"'
                         subprocess.run(cmd_msg, shell=True, capture_output=True, text=True, encoding='utf-8')
                     else:
