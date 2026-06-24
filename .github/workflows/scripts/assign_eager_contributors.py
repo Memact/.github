@@ -165,7 +165,26 @@ for repo in repos:
                                 continue
                                 
                             body_comment_lower = body_comment.lower()
-                            request_keywords = ["assign", "work on", "claim", "take this up", "contribution", "have a crack"]
+
+                            # Skip comments that express intent to withdraw or unassign
+                            negative_keywords = [
+                                "un-assign", "unassign", "remove me", "wrong issue",
+                                "not familiar", "picked the wrong", "can you un",
+                                "please un", "don't assign", "do not assign",
+                                "not interested", "withdraw", "stepping down",
+                                "stepping away", "no longer"
+                            ]
+                            if any(nk in body_comment_lower for nk in negative_keywords):
+                                print(f"  -> Skipping @{author} comment (contains unassignment/withdrawal intent).")
+                                continue
+
+                            # Only match comments that clearly express intent to work on the issue
+                            request_keywords = [
+                                "assign me", "assign this to me", "can i work on",
+                                "i would like to work", "i want to work", "claim this",
+                                "take this up", "i'll work on", "i will work on",
+                                "have a crack", "let me work", "can i take"
+                            ]
                             if any(kw in body_comment_lower for kw in request_keywords):
                                 if author.lower() in ["prasiddhi-105", "archita-29"]:
                                     print(f"  -> Skipping commenter @{author} (prasiddhi/archita blocklist).")
