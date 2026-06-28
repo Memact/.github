@@ -133,6 +133,39 @@ for repo in repos:
                     except Exception as ex:
                         print(f"  -> Error updating body: {ex}")
             
+            # --- 2.5 Unassignment Automation ---
+            if assignees:
+                cmd_comments = f'gh issue view {num} -R Memact/{repo} --json comments'
+                res_comments = subprocess.run(cmd_comments, shell=True, capture_output=True, text=True, encoding='utf-8')
+                if res_comments.returncode == 0 and res_comments.stdout:
+                    res_comment_data = json.loads(res_comments.stdout).get("comments", [])
+                    
+                    res_comment_data.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+                    
+                    negative_keywords = [
+                        "un-assign", "unassign", "remove me", "wrong issue",
+                        "not familiar", "picked the wrong", "can you un",
+                        "please un", "don't assign", "do not assign",
+                        "not interested", "withdraw", "stepping down",
+                        "stepping away", "no longer"
+                    ]
+                    
+                    for assignee in list(assignees):
+                        assignee_comments = [c for c in res_comment_data if c.get("author", {}).get("login", "") == assignee]
+                        if assignee_comments:
+                            latest_comment = assignee_comments[0].get("body", "").lower()
+                            if any(nk in latest_comment for nk in negative_keywords):
+                                print(f"  -> Assignee @{assignee} requested unassignment.")
+                                cmd_unassign = f'gh issue edit {num} -R Memact/{repo} --remove-assignee {assignee}'
+                                res_unassign = subprocess.run(cmd_unassign, shell=True, capture_output=True, text=True, encoding='utf-8')
+                                if res_unassign.returncode == 0:
+                                    body_msg = f"Okay @{assignee}, I have unassigned you from this issue."
+                                    cmd_msg = f'gh issue comment {num} -R Memact/{repo} -b "{body_msg}"'
+                                    subprocess.run(cmd_msg, shell=True)
+                                    assignees.remove(assignee)
+                                    if assignee.lower() in active_assignments:
+                                        active_assignments[assignee.lower()] = max(0, active_assignments[assignee.lower()] - 1)
+
             # --- 3. Assignment Automation (Chronological checking & assignment) ---
             if not assignees:
                 target_assignee = None
