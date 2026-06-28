@@ -133,7 +133,7 @@ for repo in repos:
                 # Parse references to issues in the PR body or title
                 # Look for formats like: #52, closes #52, fixes #52, resolve #52, etc.
                 combined_text = f"{pr_title} \n {pr_body}"
-                issue_refs = re.findall(r'(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)?\s*#(\d+)', combined_text, re.IGNORECASE)
+                issue_refs = re.findall(r'(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)?\s*#<?(\d+)>?', combined_text, re.IGNORECASE)
                 # Deduplicate and convert to integers
                 referenced_issues = list(set(int(num) for num in issue_refs))
                 
