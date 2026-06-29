@@ -268,7 +268,7 @@ for req in requests_to_process:
     if issue_key in assigned_issues:
         continue
         
-    limit = 1 if user.lower() in skeptical_list else 2
+    limit = 1 if user.lower() in skeptical_list else 5
     active_count = active_assignments.get(user.lower(), 0)
     
     def already_notified(user_login, res_comment_data):
