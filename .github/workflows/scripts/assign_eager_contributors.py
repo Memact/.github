@@ -24,13 +24,23 @@ def print(*args, **kwargs):
             new_args.append(arg)
     _orig_print(*new_args, **kwargs)
 
+# Fetch current authenticated user name
+current_user = ""
+try:
+    res_user = subprocess.run("gh api user --jq .login", shell=True, capture_output=True, text=True, encoding='utf-8')
+    if res_user.returncode == 0 and res_user.stdout:
+        current_user = res_user.stdout.strip().lower()
+except Exception:
+    pass
+
 # 1. Fetch all repositories
 cmd_repos = 'gh repo list Memact --limit 100 --json name'
 res_repos = subprocess.run(cmd_repos, shell=True, capture_output=True, text=True, encoding='utf-8')
 repos = []
 if res_repos.returncode == 0 and res_repos.stdout:
     repos_data = json.loads(res_repos.stdout)
-    repos = [r["name"] for r in repos_data]
+    # Exclude Website and oldWebsite from automation per guidelines
+    repos = [r["name"] for r in repos_data if r["name"] not in ["Website", "oldWebsite"]]
 
 # Pre-scan repositories to count current active open assignments per user
 active_assignments = {}
@@ -45,6 +55,9 @@ for repo in repos:
                 for a in issue.get("assignees", []):
                     login_lower = a["login"].lower()
                     active_assignments[login_lower] = active_assignments.get(login_lower, 0) + 1
+        else:
+            print(f"Error: Pre-scan of Memact/{repo} failed with returncode {res_issues.returncode}: {res_issues.stderr.strip() if res_issues.stderr else ''}", file=sys.stderr)
+            sys.exit(1)
     except Exception as e:
         print(f"Error during pre-scan of Memact/{repo}: {e}")
 
@@ -54,11 +67,12 @@ print(f"Current active assignments: {active_assignments}")
 print(f"Scanning {len(repos)} repositories for issue workflow automation...")
 
 temp_body_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_update_body.md")
+requests_to_process = []
 
 for repo in repos:
     try:
-        # Fetch open issues with author and assignees
-        cmd = f'gh issue list -R Memact/{repo} --state open --limit 100 --json number,title,url,assignees,author,body,labels'
+        # Fetch open issues with author, assignees, creation time, and comments
+        cmd = f'gh issue list -R Memact/{repo} --state open --limit 100 --json number,title,url,assignees,author,body,labels,createdAt,comments'
         res = subprocess.run(cmd, shell=True, capture_output=True, text=True, encoding='utf-8')
         if res.returncode != 0 or not res.stdout:
             continue
@@ -135,11 +149,8 @@ for repo in repos:
             
             # --- 2.5 Unassignment Automation ---
             if assignees:
-                cmd_comments = f'gh issue view {num} -R Memact/{repo} --json comments'
-                res_comments = subprocess.run(cmd_comments, shell=True, capture_output=True, text=True, encoding='utf-8')
-                if res_comments.returncode == 0 and res_comments.stdout:
-                    res_comment_data = json.loads(res_comments.stdout).get("comments", [])
-                    
+                res_comment_data = issue.get("comments", [])
+                if res_comment_data:
                     res_comment_data.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                     
                     negative_keywords = [
@@ -166,31 +177,25 @@ for repo in repos:
                                     if assignee.lower() in active_assignments:
                                         active_assignments[assignee.lower()] = max(0, active_assignments[assignee.lower()] - 1)
 
-            # --- 3. Assignment Automation (Chronological checking & assignment) ---
+            # --- 3. Assignment Automation (Collect requests chronologically) ---
             if not assignees:
-                target_assignee = None
-                
-                # Rule 1: If created by a community contributor, assign it to them
+                res_comment_data = issue.get("comments", [])
+
+                # Rule 1: If created by a community contributor, creator request is at issue creation time
                 if creator and creator.lower() not in ["keepsloading", "github-actions", "memact"]:
-                    if creator.lower() in ["prasiddhi-105", "archita-29"]:
-                        print(f"  -> Skipping creator assignment to @{creator} (prasiddhi/archita blocklist).")
-                    elif active_assignments.get(creator.lower(), 0) >= 2:
-                        print(f"  -> Skipping creator assignment to @{creator} (already has {active_assignments[creator.lower()]} active assignments).")
-                    else:
-                        target_assignee = creator
-                        print(f"  -> Created by contributor. Target assignee: @{target_assignee}")
+                    requests_to_process.append({
+                        "timestamp": issue.get("createdAt", ""),
+                        "repo": repo,
+                        "num": num,
+                        "user": creator,
+                        "is_creator": True,
+                        "comment_body": "Issue creation",
+                        "comments_list": res_comment_data
+                    })
+                    print(f"  -> Collected creator request from @{creator} (timestamp: {issue.get('createdAt', '')})")
                 else:
                     # Rule 2: If created by keepsloading, check comments chronologically for requests
-                    cmd_comments = f'gh issue view {num} -R Memact/{repo} --json comments'
-                    res_comments = subprocess.run(cmd_comments, shell=True, capture_output=True, text=True, encoding='utf-8')
-                    if res_comments.returncode == 0 and res_comments.stdout:
-                        res_comment_data = json.loads(res_comments.stdout).get("comments", [])
-                    else:
-                        res_comment_data = []
-                    
                     if res_comment_data:
-                        # Sort comments by creation time to find the first requester
-                        res_comment_data.sort(key=lambda x: x.get("createdAt", ""))
                         for c in res_comment_data:
                             author = c.get("author", {}).get("login", "")
                             body_comment = c.get("body", "")
@@ -208,44 +213,120 @@ for repo in repos:
                                 "stepping away", "no longer"
                             ]
                             if any(nk in body_comment_lower for nk in negative_keywords):
-                                print(f"  -> Skipping @{author} comment (contains unassignment/withdrawal intent).")
                                 continue
 
                             # Only match comments that clearly express intent to work on the issue
-                            request_keywords = [
-                                "assign me", "assign this to me", "can i work on",
-                                "i would like to work", "i want to work", "claim this",
-                                "take this up", "i'll work on", "i will work on",
-                                "have a crack", "let me work", "can i take"
-                            ]
-                            if any(kw in body_comment_lower for kw in request_keywords):
-                                if author.lower() in ["prasiddhi-105", "archita-29"]:
-                                    print(f"  -> Skipping commenter @{author} (prasiddhi/archita blocklist).")
-                                    continue
-                                if active_assignments.get(author.lower(), 0) >= 2:
-                                    print(f"  -> Skipping commenter @{author} (already has {active_assignments[author.lower()]} active assignments).")
-                                    continue
-                                target_assignee = author
-                                print(f"  -> First requester in comments: @{target_assignee}")
-                                print(f"     Comment: \"{body_comment.strip()[:100]}...\"")
-                                break
-                                
-                if target_assignee:
-                    # Apply assignment using the working PATCH API
-                    cmd_assign = f'gh api repos/Memact/{repo}/issues/{num} -X PATCH -F "assignees[]={target_assignee}"'
-                    res_assign = subprocess.run(cmd_assign, shell=True, capture_output=True, text=True, encoding='utf-8')
-                    if res_assign.returncode == 0:
-                        print(f"  [SUCCESS] Assigned Memact/{repo}#{num} to @{target_assignee}")
-                        active_assignments[target_assignee.lower()] = active_assignments.get(target_assignee.lower(), 0) + 1
-                        # Comment on the issue notifying them
-                        body_msg = f"Hey @{target_assignee} 👋 You've been assigned this issue as part of SSoC26! Looking forward to your PR. Feel free to ask questions if you get stuck. Good luck!"
-                        cmd_msg = f'gh issue comment {num} -R Memact/{repo} -b "{body_msg}"'
-                        subprocess.run(cmd_msg, shell=True, capture_output=True, text=True, encoding='utf-8')
-                    else:
-                        print(f"  [FAILED] Could not assign to @{target_assignee}: {res_assign.stderr.strip()}")
-            
+                            def is_request(body):
+                                # 1. Direct commands
+                                if body.startswith("/assign") or body.startswith("assign"):
+                                    return True
+                                # 2. "assign" and "me" or "to me"
+                                if "assign" in body and ("me" in body or "to me" in body):
+                                    return True
+                                # 3. "work" and common intent verbs/phrases
+                                if "work" in body and any(w in body for w in ["like to", "want to", "d like", "let me", "can i", "interested", "happy to", "take"]):
+                                    return True
+                                # 4. "claim" or "take" action phrases
+                                if "claim" in body or ("take" in body and any(t in body for t in ["up", "this", "it"])):
+                                    return True
+                                # 5. "contribute"
+                                if "contribute" in body:
+                                    return True
+                                return False
+
+                            if is_request(body_comment_lower):
+                                requests_to_process.append({
+                                    "timestamp": c.get("createdAt", ""),
+                                    "repo": repo,
+                                    "num": num,
+                                    "user": author,
+                                    "is_creator": False,
+                                    "comment_body": body_comment,
+                                    "comments_list": res_comment_data
+                                })
+                                print(f"  -> Collected commenter request from @{author} (timestamp: {c.get('createdAt', '')})")
+
     except Exception as e:
         print(f"Error processing Memact/{repo}: {e}")
+
+# --- 4. Global Chronological Assignment ---
+print(f"\nProcessing {len(requests_to_process)} collected requests globally by timestamp...")
+requests_to_process.sort(key=lambda x: x["timestamp"])
+
+assigned_issues = set()
+skeptical_list = ["prasiddhi-105", "codesparks45", "prassidhi", "prasiddhi", "codesparks"]
+
+for req in requests_to_process:
+    repo = req["repo"]
+    num = req["num"]
+    user = req["user"]
+    is_creator = req["is_creator"]
+    timestamp = req["timestamp"]
+    comments_list = req["comments_list"]
+    
+    issue_key = f"{repo}#{num}"
+    if issue_key in assigned_issues:
+        continue
+        
+    limit = 1 if user.lower() in skeptical_list else 2
+    active_count = active_assignments.get(user.lower(), 0)
+    
+    def already_notified(user_login, res_comment_data):
+        bot_logins = ["keepsloading", "github-actions", "memact"]
+        if current_user:
+            bot_logins.append(current_user)
+        for c in res_comment_data:
+            author_login = c.get("author", {}).get("login", "").lower()
+            body_c = c.get("body", "")
+            if (author_login in bot_logins and 
+                    f"@{user_login.lower()}" in body_c.lower() and 
+                    "active assignment" in body_c.lower() and
+                    "limit" in body_c.lower()):
+                return True
+        return False
+
+    if active_count >= limit:
+        print(f"Skipping assignment of {issue_key} to @{user} (already has {active_count} active assignments, limit is {limit}).")
+        if not already_notified(user, comments_list):
+            if is_creator:
+                body_msg = (
+                    f"Hi @{user} 👋 You created this issue and are eligible for automatic assignment. "
+                    f"However, you currently have {active_count} active assignment(s) (limit is {limit}). "
+                    "Please finish your open assignments and submit PRs or request unassignment "
+                    "before requesting a new task. Thank you!"
+                )
+            else:
+                body_msg = (
+                    f"Hi @{user} 👋 You requested to be assigned to this issue. "
+                    f"However, you currently have {active_count} active assignment(s) (limit is {limit}). "
+                    "Please finish your open assignments and submit PRs or request unassignment "
+                    "before requesting a new task. Thank you!"
+                )
+            cmd_msg = f'gh issue comment {num} -R Memact/{repo} -b "{body_msg}"'
+            subprocess.run(cmd_msg, shell=True, capture_output=True, text=True, encoding='utf-8')
+            print(f"  -> Posted active limit comment for @{user} on {issue_key}.")
+            # Add a mock comment to comments_list locally to prevent duplicate notices on the same run if they commented multiple times
+            comments_list.append({
+                "author": {"login": current_user or "keepsloading"},
+                "body": body_msg
+            })
+    else:
+        # Assign using PATCH API
+        cmd_assign = f'gh api repos/Memact/{repo}/issues/{num} -X PATCH -F "assignees[]={user}"'
+        res_assign = subprocess.run(cmd_assign, shell=True, capture_output=True, text=True, encoding='utf-8')
+        if res_assign.returncode == 0:
+            print(f"[SUCCESS] Assigned {issue_key} to @{user} (requested at {timestamp})")
+            active_assignments[user.lower()] = active_count + 1
+            assigned_issues.add(issue_key)
+            # Comment on the issue notifying them
+            if is_creator:
+                body_msg = f"Hey @{user} 👋 Since you created this issue, you've been auto-assigned to it as part of SSoC26! Looking forward to your PR. Feel free to ask questions if you get stuck. Good luck!"
+            else:
+                body_msg = f"Hey @{user} 👋 You've been assigned this issue as part of SSoC26! Looking forward to your PR. Feel free to ask questions if you get stuck. Good luck!"
+            cmd_msg = f'gh issue comment {num} -R Memact/{repo} -b "{body_msg}"'
+            subprocess.run(cmd_msg, shell=True, capture_output=True, text=True, encoding='utf-8')
+        else:
+            print(f"[FAILED] Could not assign {issue_key} to @{user}: {res_assign.stderr.strip()}")
 
 # Clean up temp file
 if os.path.exists(temp_body_path):
