@@ -6,6 +6,91 @@ Memact lets users see, edit, and control what apps think they know about them. A
 
 ## Start here
 
+## New Contributor Paths
+
+Not sure where to start? Use the guide below.
+
+### Beginner Contributors
+
+If this is your first open-source contribution, start in **Context**.
+
+Recommended work:
+
+* category schemas
+* documentation improvements
+* README improvements
+* app activity examples
+* normalized memory examples
+* sample app context dumps
+
+You do not need deep system knowledge to contribute here.
+
+Typical beginner tasks:
+
+* add examples
+* improve docs
+* add tests for existing categories
+* improve user-facing wording
+
+---
+
+### Intermediate Contributors
+
+Once you are comfortable with the project structure, consider:
+
+#### Contracts
+
+Good contributions include:
+
+* validators
+* tests
+* examples
+* error messages
+
+#### SDK
+
+Good contributions include:
+
+* SDK examples
+* TypeScript improvements
+* error handling
+* developer documentation
+
+#### Wiki Modeling
+
+Contributors may also work on:
+
+* Wiki entry state modeling
+* proposed/accepted/rejected flows
+* UX copy improvements
+
+---
+
+### Advanced Contributors
+
+Advanced contributors can work on:
+
+#### Access
+
+* permissions
+* consent systems
+* API scopes
+
+#### Memory
+
+* retrieval logic
+* forgetting behavior
+* export/import systems
+
+#### Cross-Repository Work
+
+* audit logs
+* local-first storage
+* cross-repo integration
+
+These areas usually require understanding multiple repositories and system architecture.
+
+
 If you are new, start with Context issues.
 
 Context work is the easiest way to contribute because you can pick an app category you understand and define how messy app activity becomes user-readable, editable memory.
@@ -146,6 +231,14 @@ Apps may send app activity records or suggest memory directly. Context defines t
 ```
 
 ## How to claim an issue
+
+New contributors can start with:
+
+https://github.com/Memact/Context/issues/57
+https://github.com/Memact/Context/issues/61
+https://github.com/Memact/Context/issues/63
+https://github.com/Memact/Context/issues/58
+https://github.com/Memact/Context/issues/51
 
 1. Pick an open issue labeled `SSoC26`, `good first issue`, or `help wanted`.
 2. Comment that you want to work on it.
