@@ -254,6 +254,11 @@ for repo in repos:
                         warning_lines = "\n".join([f"- {w}" for w in quality_warnings])
                         body_msg = f"{warn_prefix} We detected some potential code quality or formatting issues in your changes:\n\n{warning_lines}\n\nPlease clean these up before requesting a merge review. Thank you!"
                         post_github_comment(repo, pr_num, body_msg)
+                else:
+                    if "Quality: Needs Polish" in pr_labels:
+                        print(f"    [CLEAN] PR #{pr_num} passed quality checks. Removing 'Quality: Needs Polish' label.")
+                        cmd_remove = f'gh pr edit {pr_num} -R Memact/{repo} --remove-label "Quality: Needs Polish"'
+                        subprocess.run(cmd_remove, shell=True, capture_output=True)
                 
                 # --- Dummy PR Automation Check ---
                 if repo not in ["Context", ".github"]:
