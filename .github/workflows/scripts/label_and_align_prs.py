@@ -12,8 +12,8 @@ if sys.platform.startswith('win'):
     except Exception:
         pass
 
-# Core active repositories in the spine
-repos = ["Context", "Website", "Access", "Memory", "Contracts", "SDK", "Notebook", "Fitent", ".github"]
+# Core active repositories in the spine (excluding Website/oldWebsite per guidelines)
+repos = ["Context", "Access", "Memory", "Contracts", "SDK", "Notebook", "Fitent", ".github"]
 
 # Exact allowed case-sensitive labels
 ALLOWED_DIFFICULTIES = ["Easy", "Medium", "Hard"]
@@ -84,6 +84,42 @@ def post_github_comment(repo, pr_num, body_msg):
             os.remove(temp_comment_path)
     except Exception as e:
         print(f"Error posting comment to PR #{pr_num}: {e}")
+
+
+def check_pr_code_quality(repo, pr_num):
+    """
+    Analyzes the diff of the PR to ensure good code quality:
+    - Flags leftover console.log, debugger, etc.
+    - Flags raw secrets / API keys
+    - Flags unresolved TODOs / FIXMEs
+    """
+    cmd_diff = f'gh pr diff {pr_num} -R Memact/{repo}'
+    res_diff = subprocess.run(cmd_diff, shell=True, capture_output=True, text=True, encoding='utf-8')
+    if res_diff.returncode != 0 or not res_diff.stdout:
+        return []
+
+    warnings = []
+    lines = res_diff.stdout.split('\n')
+    
+    # regexes for checks
+    debug_pat = re.compile(r'^\+\s*(console\.log|console\.error|debugger)\b', re.IGNORECASE)
+    todo_pat = re.compile(r'^\+\s*//\s*(TODO|FIXME|XXX)\b', re.IGNORECASE)
+    secret_pat = re.compile(r'^\+.*(api_key|secret|password|passwd|bearer|private_key)\s*[:=]\s*["\'][a-zA-Z0-9_\-]{8,}["\']', re.IGNORECASE)
+
+    for line_num, line in enumerate(lines):
+        if line.startswith('+++'):
+            continue  # file headers
+        if line.startswith('+') and not line.startswith('+++'):
+            code_line = line[1:].strip()
+            
+            if debug_pat.match(line):
+                warnings.append(f"Leftover debugging statement: `{code_line}`")
+            if todo_pat.match(line):
+                warnings.append(f"Unresolved placeholder marker: `{code_line}`")
+            if secret_pat.match(line):
+                warnings.append(f"Potential hardcoded credentials/secrets exposed: `{code_line}`")
+                
+    return warnings
 
 
 # Fetch all Context PRs (open and closed) to match dummy PRs
@@ -193,6 +229,31 @@ for repo in repos:
                         subprocess.run(cmd_pr_label, shell=True, capture_output=True)
                         print(f"    [SUCCESS] Added SSoC26 label to PR #{pr_num} based on title reference.")
                         labels_to_apply.append("SSoC26")
+                
+                # --- Code Quality Check ---
+                quality_warnings = check_pr_code_quality(repo, pr_num)
+                if quality_warnings:
+                    print(f"    [WARNING] PR #{pr_num} failed code quality checks: {quality_warnings}")
+                    # Apply Quality Warning label
+                    col = "d93f0b"
+                    subprocess.run(f'gh label create "Quality: Needs Polish" -R Memact/{repo} --color "{col}"', shell=True, capture_output=True)
+                    cmd_label = f'gh pr edit {pr_num} -R Memact/{repo} --add-label "Quality: Needs Polish"'
+                    subprocess.run(cmd_label, shell=True, capture_output=True)
+                    
+                    # Post warning comment if not already posted
+                    cmd_comments = f'gh pr view {pr_num} -R Memact/{repo} --json comments'
+                    res_comments = subprocess.run(cmd_comments, shell=True, capture_output=True, text=True, encoding='utf-8')
+                    comments = []
+                    if res_comments.returncode == 0 and res_comments.stdout:
+                        comments = json.loads(res_comments.stdout).get("comments", [])
+                    comment_bodies = [c["body"] for c in comments]
+                    
+                    warn_prefix = "**SSoC26 Code Quality Warning:**"
+                    already_warned = any(warn_prefix in b for b in comment_bodies)
+                    if not already_warned:
+                        warning_lines = "\n".join([f"- {w}" for w in quality_warnings])
+                        body_msg = f"{warn_prefix} We detected some potential code quality or formatting issues in your changes:\n\n{warning_lines}\n\nPlease clean these up before requesting a merge review. Thank you!"
+                        post_github_comment(repo, pr_num, body_msg)
                 
                 # --- Dummy PR Automation Check ---
                 if repo not in ["Context", ".github"]:
