@@ -1,58 +1,39 @@
 """
-===============================================================================
-Memact SSoC26 Automation Engine
--------------------------------------------------------------------------------
+Memact SSoC26 automation engine.
 
-Single automation engine replacing:
-
-- assign_eager_contributors.py
-- label_and_align_prs.py
-- warn_stale_assignments.py
-- check_unassign_comments.py
-
-Author:
-Memact
-
-===============================================================================
+Replaces the old split scripts for issue labeling, assignment/unassignment,
+stale reminders, PR label sync, dummy PR checks, quality checks, and
+auto-closing resolved issues.
 """
 
+from __future__ import annotations
+
+import datetime as dt
 import json
-import subprocess
-import re
 import os
+import re
+import subprocess
 import sys
 import tempfile
-import shutil
-import datetime
 import time
 from collections import defaultdict
+from contextlib import contextmanager
+from typing import Any
 
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
 
-ORG_NAME = "Memact"
+ORG_NAME = os.environ.get("ORG_NAME", "Memact")
+REPO_LIMIT = int(os.environ.get("REPO_LIMIT", "1000"))
+ISSUE_LIMIT = int(os.environ.get("ISSUE_LIMIT", "1000"))
+PR_LIMIT = int(os.environ.get("PR_LIMIT", "1000"))
 
-EXCLUDED_REPOSITORIES = {
-    "Website",
-    "oldWebsite"
-}
-
-CORE_REPOSITORIES = [
-    "Context",
-    "Access",
-    "Memory",
-    "Contracts",
-    "SDK",
-    "Notebook",
-    "Fitent",
-    ".github"
-]
+EXCLUDED_REPOSITORIES = {"Website", "oldWebsite"}
+CONTEXT_REPO = "Context"
 
 BOT_USERS = {
     "keepsloading",
     "github-actions",
-    "memact"
+    "github-actions[bot]",
+    "memact",
 }
 
 LABEL_COLORS = {
@@ -60,2916 +41,1060 @@ LABEL_COLORS = {
     "Easy": "008672",
     "Medium": "d1b100",
     "Hard": "e11d21",
-    "Quality: Needs Polish": "d93f0b"
+    "Quality: Needs Polish": "d93f0b",
 }
-
-DIFFICULTIES = (
-    "Easy",
-    "Medium",
-    "Hard"
-)
 
 LABEL_NORMALIZATION = {
     "easy": "Easy",
     "medium": "Medium",
     "hard": "Hard",
-    "ssoc26": "SSoC26"
+    "ssoc26": "SSoC26",
 }
 
-NEGATIVE_KEYWORDS = [
-
-    "unassign",
-    "un-assign",
-    "remove me",
-    "wrong issue",
-    "withdraw",
-    "not interested",
-    "please un",
-    "don't assign",
-    "do not assign",
-    "stepping away",
-    "stepping down",
-    "no longer",
-    "not familiar",
-    "picked the wrong"
-]
+DIFFICULTIES = {"Easy", "Medium", "Hard"}
 
 ASSIGN_PATTERNS = [
-
-    r"^/assign",
-    r"^assign",
-    r"assign me",
-    r"assign to me",
-    r"claim",
-    r"take this",
-    r"take it",
-    r"contribute",
-    r"i.?d like to work",
-    r"want to work",
-    r"can i work",
-    r"happy to work",
-    r"let me work",
+    re.compile(r"^\s*/assign\s*$", re.IGNORECASE),
+    re.compile(r"\bassign me\b", re.IGNORECASE),
+    re.compile(r"\bplease assign (?:me|this to me)\b", re.IGNORECASE),
+    re.compile(r"\bi would like to work on this\b", re.IGNORECASE),
+    re.compile(r"\bi'd like to work on this\b", re.IGNORECASE),
+    re.compile(r"\bi want to work on this\b", re.IGNORECASE),
+    re.compile(r"\bcan i work on this\b", re.IGNORECASE),
 ]
 
-QUALITY_PATTERNS = {
-
-    "debug": re.compile(
-        r"(console\.log|console\.error|debugger)",
-        re.IGNORECASE
-    ),
-
-    "todo": re.compile(
-        r"(TODO|FIXME|XXX)",
-        re.IGNORECASE
-    ),
-
-    "secret": re.compile(
-        r"(api_key|secret|password|passwd|bearer|private_key)",
-        re.IGNORECASE
-    )
-}
-
-STALE_AFTER_DAYS = 3
+NEGATIVE_PATTERNS = [
+    re.compile(r"^\s*/unassign\s*$", re.IGNORECASE),
+    re.compile(r"\bplease unassign me\b", re.IGNORECASE),
+    re.compile(r"\bunassign me\b", re.IGNORECASE),
+    re.compile(r"\bremove me\b", re.IGNORECASE),
+    re.compile(r"\bi withdraw\b", re.IGNORECASE),
+    re.compile(r"\bi am no longer working on this\b", re.IGNORECASE),
+    re.compile(r"\bi'm no longer working on this\b", re.IGNORECASE),
+]
 
 DEFAULT_ASSIGNMENT_LIMIT = 10
-
 GREYLIST_LIMIT = 1
-
 FORMER_GREYLIST = {
-
     "codesparks45",
     "codesparks",
     "prasiddhi-105",
     "prasiddhi",
-    "prassidhi"
+    "prassidhi",
 }
 
-EXEMPT_FROM_STALE = {
+EXEMPT_FROM_STALE = {"yachna-jpg"}
+STALE_AFTER_DAYS = 3
 
-    "yachna-jpg"
+MARKERS = {
+    "assignment_limit": "<!-- ssoc26-assignment-limit -->",
+    "assignment_success": "<!-- ssoc26-assignment-success -->",
+    "unassign": "<!-- ssoc26-unassign-confirmation -->",
+    "stale": "<!-- ssoc26-stale-reminder -->",
+    "pr_label": "<!-- ssoc26-pr-label-sync -->",
+    "dummy_success": "<!-- ssoc26-dummy-pr-success -->",
+    "dummy_warning": "<!-- ssoc26-dummy-pr-warning -->",
+    "quality": "<!-- ssoc26-quality-warning -->",
 }
 
-# =============================================================================
-# GLOBAL CACHE
-# =============================================================================
+SKIP_DIFF_PREFIXES = ("docs/", "examples/", "test/", "tests/", ".github/")
+SKIP_DIFF_FILES = {
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "npm-shrinkwrap.json",
+}
 
-CACHE = {
+QUALITY_RULES = [
+    (
+        "Debug Statements",
+        re.compile(r"\b(console\.log|console\.error|debugger)\b", re.IGNORECASE),
+        "Remove debugging statements before review.",
+        False,
+    ),
+    (
+        "TODO Marker",
+        re.compile(r"\b(TODO|FIXME|XXX)\b", re.IGNORECASE),
+        "Resolve placeholder markers before review.",
+        False,
+    ),
+    (
+        "Possible Secret",
+        re.compile(
+            r"\b(api[_-]?key|secret|password|passwd|bearer|private[_-]?key)\b\s*[:=]",
+            re.IGNORECASE,
+        ),
+        "Review this file for possible hardcoded credentials.",
+        True,
+    ),
+]
 
+CACHE: dict[str, Any] = {
     "repositories": [],
-
     "issues": {},
-
     "prs": {},
-
     "merged_prs": {},
-
-    "comments": {},
-
+    "issue_comments": {},
+    "pr_comments": {},
+    "timelines": {},
     "assignment_count": defaultdict(int),
-
     "latest_intent": defaultdict(dict),
-
     "current_user": "",
-
-    "stats": defaultdict(int)
+    "stats": defaultdict(int),
 }
 
-# =============================================================================
-# LOGGING
-# =============================================================================
 
-def info(msg):
-    print(f"[INFO] {msg}")
+def info(message: str) -> None:
+    print(f"[INFO] {message}")
 
-def success(msg):
-    print(f"[SUCCESS] {msg}")
 
-def warning(msg):
-    print(f"[WARNING] {msg}")
+def success(message: str) -> None:
+    print(f"[SUCCESS] {message}")
 
-def error(msg):
-    print(f"[ERROR] {msg}")
 
-# =============================================================================
-# GITHUB WRAPPER
-# =============================================================================
+def warning(message: str) -> None:
+    print(f"[WARNING] {message}", file=sys.stderr)
 
-def gh(command):
 
+def error(message: str) -> None:
+    print(f"[ERROR] {message}", file=sys.stderr)
+
+
+def gh(args: list[str], *, log_failure: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
-
-        command,
-
-        shell=True,
-
+        ["gh", *args],
         capture_output=True,
-
         text=True,
-
-        encoding="utf-8"
+        encoding="utf-8",
+        check=False,
     )
-
+    if log_failure and result.returncode != 0:
+        error("Command failed: gh " + " ".join(args))
+        if result.stderr.strip():
+            error(result.stderr.strip())
     return result
 
-def gh_json(command):
 
-    result = gh(command)
-
-    if result.returncode != 0:
-
+def gh_json(args: list[str]) -> Any | None:
+    result = gh(args)
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        error("Invalid JSON from: gh " + " ".join(args))
+        error(str(exc))
+        error(result.stdout[:1000])
         return None
 
-    if not result.stdout.strip():
 
+@contextmanager
+def temp_markdown(content: str):
+    path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".md",
+            mode="w",
+            encoding="utf-8",
+        ) as handle:
+            handle.write(content)
+            path = handle.name
+        yield path
+    finally:
+        if path:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+
+
+def normalize_label(label: str) -> str:
+    return LABEL_NORMALIZATION.get(label.lower(), label)
+
+
+def label_names(item: dict[str, Any]) -> set[str]:
+    return {normalize_label(label.get("name", "")) for label in item.get("labels", [])}
+
+
+def author_login(item: dict[str, Any]) -> str:
+    return item.get("author", {}).get("login", "").lower()
+
+
+def is_bot(username: str) -> bool:
+    return username.lower() in BOT_USERS
+
+
+def current_utc() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def parse_github_time(value: str | None) -> dt.datetime | None:
+    if not value:
+        return None
+    try:
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        warning(f"Invalid GitHub timestamp: {value}")
         return None
 
-    return json.loads(result.stdout)
 
-def gh_success(command):
+def contains_assignment_request(text: str) -> bool:
+    return any(pattern.search(text or "") for pattern in ASSIGN_PATTERNS)
 
-    return gh(command).returncode == 0
 
-# =============================================================================
-# UTILITIES
-# =============================================================================
+def contains_negative_intent(text: str) -> bool:
+    return any(pattern.search(text or "") for pattern in NEGATIVE_PATTERNS)
 
-def normalize_label(label):
 
-    return LABEL_NORMALIZATION.get(
+def issue_reference_pattern(repo: str, number: int, *, closing_keyword: bool = False) -> re.Pattern[str]:
+    org = re.escape(ORG_NAME)
+    repository = re.escape(repo)
+    issue = re.escape(str(number))
+    ref = (
+        rf"(?:"
+        rf"#{issue}\b|"
+        rf"{org}/{repository}#{issue}\b|"
+        rf"{repository}#{issue}\b|"
+        rf"github\.com/{org}/{repository}/issues/{issue}\b|"
+        rf"issue\s+{issue}\b"
+        rf")"
+    )
+    if closing_keyword:
+        return re.compile(
+            rf"\b(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+{ref}",
+            re.IGNORECASE,
+        )
+    return re.compile(ref, re.IGNORECASE)
 
-        label.lower(),
 
-        label
+def pr_reference_pattern(repo: str, number: int) -> re.Pattern[str]:
+    org = re.escape(ORG_NAME)
+    repository = re.escape(repo)
+    pr_number = re.escape(str(number))
+    return re.compile(
+        rf"(?:"
+        rf"{org}/{repository}#{pr_number}\b|"
+        rf"{repository}#{pr_number}\b|"
+        rf"github\.com/{org}/{repository}/pull/{pr_number}\b|"
+        rf"{repository}\s+(?:pr|pull)\s*#?{pr_number}\b"
+        rf")",
+        re.IGNORECASE,
     )
 
-def contains_negative_intent(text):
 
-    text = text.lower()
+def load_event() -> dict[str, Any] | None:
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not event_path:
+        return None
+    try:
+        with open(event_path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except OSError as exc:
+        warning(f"Could not read event payload: {exc}")
+        return None
 
-    return any(
 
-        keyword in text
+def event_repo_only() -> str | None:
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+    if event_name in {"issue_comment", "issues", "pull_request"}:
+        event = load_event()
+        full_name = (event or {}).get("repository", {}).get("full_name", "")
+        owner, _, repo = full_name.partition("/")
+        if owner.lower() == ORG_NAME.lower() and repo:
+            return repo
+    return None
 
-        for keyword in NEGATIVE_KEYWORDS
 
-    )
-
-def contains_assignment_request(text):
-
-    text = text.lower()
-
-    return any(
-
-        re.search(pattern, text)
-
-        for pattern in ASSIGN_PATTERNS
-
-    )
-
-def current_utc():
-
-    return datetime.datetime.now(
-
-        datetime.timezone.utc
-    )
-
-def temp_markdown(content):
-
-    handle = tempfile.NamedTemporaryFile(
-
-        delete=False,
-
-        suffix=".md",
-
-        mode="w",
-
-        encoding="utf-8"
-    )
-
-    handle.write(content)
-
-    handle.close()
-
-    return handle.name
-
-# =============================================================================
-# INITIALIZATION
-# =============================================================================
-
-def initialize():
-
-    info("Initializing automation engine...")
-
+def initialize() -> None:
     if sys.platform.startswith("win"):
-
         try:
-
-            sys.stdout.reconfigure(
-
-                encoding="utf-8"
-            )
-
-            sys.stderr.reconfigure(
-
-                encoding="utf-8"
-            )
-
+            sys.stdout.reconfigure(encoding="utf-8")
+            sys.stderr.reconfigure(encoding="utf-8")
         except Exception:
-
             pass
 
-    result = gh(
+    result = gh(["api", "user", "--jq", ".login"])
+    if result.returncode != 0:
+        error("GitHub authentication failed.")
+        sys.exit(1)
+    CACHE["current_user"] = result.stdout.strip().lower()
+    if CACHE["current_user"]:
+        BOT_USERS.add(CACHE["current_user"])
 
-        "gh api user --jq .login"
-    )
 
-    if result.returncode == 0:
-
-        CACHE["current_user"] = result.stdout.strip().lower()
-
-        BOT_USERS.add(
-
-            CACHE["current_user"]
-        )
-
-    success("Initialization complete.")
-
-    # =============================================================================
-# REPOSITORY DISCOVERY
-# =============================================================================
-
-def fetch_repositories():
-
-    info("Discovering repositories...")
-
-    repos = gh_json(
-        f'gh repo list {ORG_NAME} --limit 100 --json name'
-    )
-
-    if not repos:
-        error("Could not fetch repositories.")
+def fetch_repositories() -> None:
+    repo_filter = event_repo_only()
+    if repo_filter:
+        CACHE["repositories"] = [] if repo_filter in EXCLUDED_REPOSITORIES else [repo_filter]
+        success(f"Loaded event repository: {repo_filter}")
         return
 
-    CACHE["repositories"] = sorted([
-        r["name"]
-        for r in repos
-        if r["name"] not in EXCLUDED_REPOSITORIES
-    ])
+    repos = gh_json(["repo", "list", ORG_NAME, "--limit", str(REPO_LIMIT), "--json", "name"])
+    if repos is None:
+        error("Could not fetch repositories.")
+        sys.exit(1)
 
-    success(
-        f"Loaded {len(CACHE['repositories'])} repositories."
+    CACHE["repositories"] = sorted(
+        repo["name"] for repo in repos if repo.get("name") not in EXCLUDED_REPOSITORIES
     )
+    success(f"Loaded {len(CACHE['repositories'])} repositories.")
 
 
-# =============================================================================
-# FETCH ALL ISSUES
-# =============================================================================
+def fetch_issue_comments(repo: str, issue_number: int, *, refresh: bool = False) -> list[dict[str, Any]]:
+    key = (repo, issue_number)
+    if not refresh and key in CACHE["issue_comments"]:
+        return CACHE["issue_comments"][key]
+    data = gh_json(["issue", "view", str(issue_number), "-R", f"{ORG_NAME}/{repo}", "--json", "comments"])
+    comments = (data or {}).get("comments", [])
+    CACHE["issue_comments"][key] = comments
+    return comments
 
-def fetch_all_issues():
 
-    info("Fetching issues...")
+def fetch_pr_comments(repo: str, pr_number: int, *, refresh: bool = False) -> list[dict[str, Any]]:
+    key = (repo, pr_number)
+    if not refresh and key in CACHE["pr_comments"]:
+        return CACHE["pr_comments"][key]
+    data = gh_json(["pr", "view", str(pr_number), "-R", f"{ORG_NAME}/{repo}", "--json", "comments"])
+    comments = (data or {}).get("comments", [])
+    CACHE["pr_comments"][key] = comments
+    return comments
 
+
+def fetch_all_issues() -> None:
+    info("Fetching open issues...")
     CACHE["issues"].clear()
+    CACHE["stats"]["issues"] = 0
 
     for repo in CACHE["repositories"]:
-
-        data = gh_json(
-
-            f'gh issue list '
-            f'-R {ORG_NAME}/{repo} '
-            f'--state open '
-            f'--limit 100 '
-            f'--json '
-            f'number,title,body,url,'
-            f'author,labels,assignees,'
-            f'comments,createdAt'
-
+        issues = gh_json(
+            [
+                "issue",
+                "list",
+                "-R",
+                f"{ORG_NAME}/{repo}",
+                "--state",
+                "open",
+                "--limit",
+                str(ISSUE_LIMIT),
+                "--json",
+                "number,title,body,url,author,labels,assignees,createdAt",
+            ]
         )
-
-        if data is None:
+        if issues is None:
             warning(f"{repo}: issue fetch failed.")
             continue
-
-        CACHE["issues"][repo] = data
-
-        CACHE["stats"]["issues"] += len(data)
-
-    success(
-        f"Fetched {CACHE['stats']['issues']} open issues."
-    )
+        for issue in issues:
+            issue["comments"] = fetch_issue_comments(repo, issue["number"])
+        CACHE["issues"][repo] = issues
+        CACHE["stats"]["issues"] += len(issues)
 
 
-# =============================================================================
-# FETCH ALL PRS
-# =============================================================================
-
-def fetch_all_pull_requests():
-
+def fetch_all_pull_requests() -> None:
     info("Fetching pull requests...")
-
     CACHE["prs"].clear()
     CACHE["merged_prs"].clear()
+    CACHE["stats"]["prs"] = 0
 
-    for repo in CACHE["repositories"]:
-
+    repos = set(CACHE["repositories"])
+    repos.add(CONTEXT_REPO)
+    for repo in sorted(repos):
         prs = gh_json(
-
-            f'gh pr list '
-            f'-R {ORG_NAME}/{repo} '
-            f'--state all '
-            f'--limit 150 '
-            f'--json '
-            f'number,title,body,state,'
-            f'author,labels'
-
+            [
+                "pr",
+                "list",
+                "-R",
+                f"{ORG_NAME}/{repo}",
+                "--state",
+                "all",
+                "--limit",
+                str(PR_LIMIT),
+                "--json",
+                "number,title,body,state,author,labels,url",
+            ]
         )
-
         if prs is None:
             warning(f"{repo}: PR fetch failed.")
             continue
-
         CACHE["prs"][repo] = prs
-
-        CACHE["merged_prs"][repo] = [
-
-            pr
-
-            for pr in prs
-
-            if str(pr.get("state", "")).lower() == "merged"
-
-        ]
-
-        CACHE["stats"]["prs"] += len(prs)
-
-    success(
-        f"Fetched {CACHE['stats']['prs']} pull requests."
-    )
+        CACHE["merged_prs"][repo] = [pr for pr in prs if pr.get("state", "").lower() == "merged"]
+        if repo in CACHE["repositories"]:
+            CACHE["stats"]["prs"] += len(prs)
 
 
-# =============================================================================
-# BUILD ACTIVE ASSIGNMENT INDEX
-# =============================================================================
-
-def build_assignment_index():
-
-    info("Counting active assignments...")
-
+def build_assignment_index() -> None:
     CACHE["assignment_count"].clear()
-
-    for repo, issues in CACHE["issues"].items():
-
+    for issues in CACHE["issues"].values():
         for issue in issues:
-
             for assignee in issue.get("assignees", []):
-
-                login = assignee["login"].lower()
-
-                CACHE["assignment_count"][login] += 1
-
-    success(
-        f"Indexed {len(CACHE['assignment_count'])} contributors."
-    )
+                CACHE["assignment_count"][assignee.get("login", "").lower()] += 1
 
 
-# =============================================================================
-# BUILD LATEST INTENT STATE
-# =============================================================================
-
-#
-# This replaces the old assignment logic.
-#
-# Every contributor on every issue has ONE latest intent.
-#
-# ASSIGN
-# UNASSIGN
-# NONE
-#
-# Only the newest intent matters.
-#
-
-def build_intent_index():
-
-    info("Building contributor intent graph...")
-
+def build_intent_index() -> None:
     CACHE["latest_intent"].clear()
-
     for repo, issues in CACHE["issues"].items():
-
         for issue in issues:
-
-            issue_id = issue["number"]
-
-            creator = issue.get("author", {})
-
-            creator_login = ""
-
-            if creator:
-                creator_login = creator.get("login", "").lower()
-
-            #
-            # Creator implicitly wants assignment.
-            #
-
-            if creator_login and creator_login not in BOT_USERS:
-
-                CACHE["latest_intent"][repo].setdefault(
-                    issue_id,
-                    {}
-                )
-
-                CACHE["latest_intent"][repo][issue_id][creator_login] = {
-
-                    "intent": "ASSIGN",
-                    "timestamp": issue.get("createdAt", "")
+            issue_number = issue["number"]
+            comments = sorted(issue.get("comments", []), key=lambda item: item.get("createdAt", ""))
+            for comment in comments:
+                username = comment.get("author", {}).get("login", "").lower()
+                if not username or is_bot(username):
+                    continue
+                body = comment.get("body", "")
+                if contains_negative_intent(body):
+                    intent = "UNASSIGN"
+                elif contains_assignment_request(body):
+                    intent = "ASSIGN"
+                else:
+                    continue
+                CACHE["latest_intent"][repo].setdefault(issue_number, {})[username] = {
+                    "intent": intent,
+                    "timestamp": comment.get("createdAt", ""),
                 }
 
-            comments = sorted(
 
-                issue.get("comments", []),
-
-                key=lambda x: x.get("createdAt", "")
-
-            )
-
-            for comment in comments:
-
-                author = comment.get("author", {}).get("login", "")
-
-                if not author:
-                    continue
-
-                author = author.lower()
-
-                if author in BOT_USERS:
-                    continue
-
-                body = comment.get("body", "")
-
-                CACHE["latest_intent"][repo].setdefault(
-
-                    issue_id,
-
-                    {}
-
-                )
-
-                #
-                # Withdrawal overrides previous assignment request.
-                #
-
-                if contains_negative_intent(body):
-
-                    CACHE["latest_intent"][repo][issue_id][author] = {
-
-                        "intent": "UNASSIGN",
-
-                        "timestamp": comment["createdAt"]
-
-                    }
-
-                    continue
-
-                #
-                # Fresh assignment request.
-                #
-
-                if contains_assignment_request(body):
-
-                    CACHE["latest_intent"][repo][issue_id][author] = {
-
-                        "intent": "ASSIGN",
-
-                        "timestamp": comment["createdAt"]
-
-                    }
-
-    success("Intent graph built.")
+def bot_comment_exists(comments: list[dict[str, Any]], marker: str) -> bool:
+    for comment in comments:
+        username = comment.get("author", {}).get("login", "").lower()
+        if is_bot(username) and marker in (comment.get("body") or ""):
+            return True
+    return False
 
 
-# =============================================================================
-# SUMMARY
-# =============================================================================
-
-def print_summary():
-
-    print()
-
-    print("=" * 70)
-
-    info("Automation cache summary")
-
-    print("=" * 70)
-
-    print(f"Repositories : {len(CACHE['repositories'])}")
-    print(f"Issues       : {CACHE['stats']['issues']}")
-    print(f"PRs          : {CACHE['stats']['prs']}")
-    print(f"Contributors : {len(CACHE['assignment_count'])}")
-
-    print("=" * 70)
-
-    print()
-
-
-# =============================================================================
-# MAIN
-# =============================================================================
-
-def main():
-
-    start = time.time()
-
-    initialize()
-
-    fetch_repositories()
-
-    fetch_all_issues()
-
-    fetch_all_pull_requests()
-
-    build_assignment_index()
-
-    build_intent_index()
-
-    #
-    # Engines begin here
-    #
-
-    # label_issue_engine()
-
-    # difficulty_engine()
-
-    # assignment_engine()
-
-    # unassignment_engine()
-
-    # stale_assignment_engine()
-
-    # pr_label_engine()
-
-    # dummy_pr_engine()
-
-    # quality_engine()
-
-    # autoclose_engine()
-
-    print_summary()
-
-    success(
-        f"Completed in {round(time.time()-start,2)} seconds."
+def post_comment_once(kind: str, repo: str, number: int, marker: str, body: str) -> bool:
+    comments = (
+        fetch_issue_comments(repo, number, refresh=True)
+        if kind == "issue"
+        else fetch_pr_comments(repo, number, refresh=True)
     )
+    if bot_comment_exists(comments, marker):
+        return False
 
-
-if __name__ == "__main__":
-
-    main()
-# =============================================================================
-# ASSIGNMENT ENGINE
-# =============================================================================
-
-def assignment_limit(username):
-
-    username = username.lower()
-
-    if username in FORMER_GREYLIST:
-        return GREYLIST_LIMIT
-
-    return DEFAULT_ASSIGNMENT_LIMIT
-
-
-def already_assigned(issue, username):
-
-    username = username.lower()
-
-    for assignee in issue.get("assignees", []):
-
-        if assignee["login"].lower() == username:
-            return True
-
+    full_body = f"{marker}\n{body}"
+    command = "issue" if kind == "issue" else "pr"
+    with temp_markdown(full_body) as path:
+        result = gh([command, "comment", str(number), "-R", f"{ORG_NAME}/{repo}", "-F", path])
+    if result.returncode == 0:
+        if kind == "issue":
+            fetch_issue_comments(repo, number, refresh=True)
+        else:
+            fetch_pr_comments(repo, number, refresh=True)
+        return True
     return False
 
 
-def comment_already_exists(issue, username):
-
-    bot_users = BOT_USERS.copy()
-
-    for c in issue.get("comments", []):
-
-        author = c.get("author", {}).get("login", "").lower()
-
-        if author not in bot_users:
-            continue
-
-        body = c.get("body", "").lower()
-
-        if (
-            username.lower() in body
-            and "active assignment" in body
-            and "limit" in body
-        ):
-            return True
-
-    return False
-
-
-def assign_user(repo, issue_number, username):
-
+def ensure_label(repo: str, label: str) -> bool:
+    color = LABEL_COLORS.get(label, "ededed")
     result = gh(
+        ["label", "create", label, "-R", f"{ORG_NAME}/{repo}", "--color", color, "--force"],
+        log_failure=False,
+    )
+    if result.returncode != 0:
+        warning(f"{repo}: could not ensure label {label}: {result.stderr.strip()}")
+        return False
+    return True
 
-        f'gh api repos/{ORG_NAME}/{repo}/issues/{issue_number} '
-        f'-X PATCH '
-        f'-F "assignees[]={username}"'
 
+def edit_labels(kind: str, repo: str, number: int, *, add: list[str] | None = None, remove: list[str] | None = None) -> bool:
+    ok = True
+    command = "issue" if kind == "issue" else "pr"
+    for label in add or []:
+        if not ensure_label(repo, label):
+            ok = False
+            continue
+        result = gh([command, "edit", str(number), "-R", f"{ORG_NAME}/{repo}", "--add-label", label])
+        ok = ok and result.returncode == 0
+    for label in remove or []:
+        result = gh(
+            [command, "edit", str(number), "-R", f"{ORG_NAME}/{repo}", "--remove-label", label],
+            log_failure=False,
+        )
+        if result.returncode != 0 and "not found" not in result.stderr.lower():
+            warning(f"{repo}#{number}: could not remove label {label}: {result.stderr.strip()}")
+            ok = False
+    return ok
+
+
+def sync_normalized_labels(kind: str, repo: str, number: int, labels: set[str]) -> set[str]:
+    updated = set(labels)
+    for label in list(labels):
+        fixed = normalize_label(label)
+        if fixed == label:
+            continue
+        if edit_labels(kind, repo, number, add=[fixed], remove=[label]):
+            updated.discard(label)
+            updated.add(fixed)
+    return updated
+
+
+def detect_difficulty(title: str, body: str | None) -> str | None:
+    text = f"{title}\n{body or ''}".lower()
+    if re.search(r"\beasy\b", text):
+        return "Easy"
+    if re.search(r"\bmedium\b", text):
+        return "Medium"
+    if re.search(r"\bhard\b", text):
+        return "Hard"
+    return None
+
+
+def label_issue_engine() -> None:
+    added = 0
+    for repo, issues in CACHE["issues"].items():
+        for issue in issues:
+            labels = sync_normalized_labels("issue", repo, issue["number"], label_names(issue))
+            to_add = []
+            if "SSoC26" not in labels:
+                to_add.append("SSoC26")
+            difficulty = detect_difficulty(issue.get("title", ""), issue.get("body"))
+            if difficulty and difficulty not in labels:
+                to_add.append(difficulty)
+            if edit_labels("issue", repo, issue["number"], add=to_add):
+                added += len(to_add)
+    CACHE["stats"]["issue_labels_added"] = added
+
+
+def assignment_limit(username: str) -> int:
+    return GREYLIST_LIMIT if username.lower() in FORMER_GREYLIST else DEFAULT_ASSIGNMENT_LIMIT
+
+
+def fetch_issue(repo: str, issue_number: int) -> dict[str, Any] | None:
+    return gh_json(
+        [
+            "issue",
+            "view",
+            str(issue_number),
+            "-R",
+            f"{ORG_NAME}/{repo}",
+            "--json",
+            "number,assignees,labels,author,createdAt",
+        ]
     )
 
+
+def fetch_active_assignment_count(username: str) -> int:
+    username = username.lower()
+    count = 0
+    for repo in CACHE["repositories"]:
+        data = gh_json(
+            [
+                "issue",
+                "list",
+                "-R",
+                f"{ORG_NAME}/{repo}",
+                "--state",
+                "open",
+                "--assignee",
+                username,
+                "--limit",
+                str(ISSUE_LIMIT),
+                "--json",
+                "number",
+            ]
+        )
+        if data is not None:
+            count += len(data)
+    CACHE["assignment_count"][username] = count
+    return count
+
+
+def assign_user(repo: str, issue_number: int, username: str) -> bool:
+    result = gh(
+        [
+            "issue",
+            "edit",
+            str(issue_number),
+            "-R",
+            f"{ORG_NAME}/{repo}",
+            "--add-assignee",
+            username,
+        ]
+    )
     return result.returncode == 0
 
 
-def assignment_engine():
-
-    info("Running assignment engine...")
-
+def assignment_engine() -> None:
     assigned = 0
-
     skipped = 0
-
-    for repo in CACHE["repositories"]:
-
-        repo_state = CACHE["latest_intent"].get(repo, {})
-
-        repo_issues = CACHE["issues"].get(repo, [])
-
-        issue_lookup = {
-
-            i["number"]: i
-
-            for i in repo_issues
-
-        }
-
-        #
-        # Iterate issue by issue
-        #
-
-        for issue_number, users in repo_state.items():
-
-            issue = issue_lookup.get(issue_number)
-
-            if issue is None:
+    for repo, issue_states in CACHE["latest_intent"].items():
+        for issue_number, users in issue_states.items():
+            fresh_issue = fetch_issue(repo, issue_number)
+            if not fresh_issue:
+                continue
+            if fresh_issue.get("assignees"):
+                skipped += 1
                 continue
 
-            #
-            # Someone already owns the issue.
-            #
-
-            if issue.get("assignees"):
-
-                continue
-
-            #
-            # Build candidate list
-            #
-
-            candidates = []
-
-            for username, state in users.items():
-
-                if state["intent"] != "ASSIGN":
-                    continue
-
-                candidates.append({
-
-                    "user": username,
-
-                    "timestamp": state["timestamp"]
-
-                })
-
+            candidates = [
+                {"user": username, "timestamp": state["timestamp"]}
+                for username, state in users.items()
+                if state.get("intent") == "ASSIGN"
+            ]
             if not candidates:
                 continue
 
-            #
-            # First request wins
-            #
-
-            candidates.sort(
-
-                key=lambda x: x["timestamp"]
-
-            )
-
+            candidates.sort(key=lambda item: item["timestamp"])
             winner = candidates[0]["user"]
-
-            #
-            # Assignment limit
-            #
-
-            active = CACHE["assignment_count"].get(
-
-                winner,
-
-                0
-
-            )
-
+            active = fetch_active_assignment_count(winner)
             limit = assignment_limit(winner)
 
             if active >= limit:
-
                 skipped += 1
-
-                if not comment_already_exists(
-
-                    issue,
-
-                    winner
-
-                ):
-
-                    body = (
-
-                        f"Hi @{winner} 👋\n\n"
-
-                        f"You currently have **{active} active assignment(s)** "
-
-                        f"(limit: **{limit}**).\n\n"
-
-                        "Please finish one of your existing issues "
-
-                        "before requesting another."
-
-                    )
-
-                    file = temp_markdown(body)
-
-                    gh(
-
-                        f'gh issue comment {issue_number} '
-
-                        f'-R {ORG_NAME}/{repo} '
-
-                        f'-F "{file}"'
-
-                    )
-
-                    os.remove(file)
-
+                post_comment_once(
+                    "issue",
+                    repo,
+                    issue_number,
+                    MARKERS["assignment_limit"],
+                    (
+                        f"Hi @{winner},\n\n"
+                        f"You currently have {active} active assignment(s), and the limit is {limit}. "
+                        "Please finish an existing assignment or request unassignment before taking another issue."
+                    ),
+                )
                 continue
 
-            #
-            # Assign
-            #
-
-            ok = assign_user(
-
-                repo,
-
-                issue_number,
-
-                winner
-
-            )
-
-            if not ok:
-
-                warning(
-
-                    f"Assignment failed "
-
-                    f"{repo}#{issue_number}"
-
-                )
-
+            fresh_issue = fetch_issue(repo, issue_number)
+            if not fresh_issue or fresh_issue.get("assignees"):
+                skipped += 1
+                continue
+            if not assign_user(repo, issue_number, winner):
                 continue
 
             CACHE["assignment_count"][winner] += 1
-
             assigned += 1
-
-            #
-            # Success comment
-            #
-
             body = (
-
-                f"Hey @{winner} 👋\n\n"
-
-                "You have been assigned this issue "
-
-                "for **SSoC26**.\n\n"
-
-                "Good luck! 🚀"
-
+                f"Hey @{winner},\n\n"
+                "You have been assigned this issue for SSoC26. Looking forward to your PR."
             )
-
-            #
-            # Former greylist notice
-            #
-
             if winner in FORMER_GREYLIST:
-
                 body += (
-
-                    "\n\n"
-
-                    "⚠️ Please pay extra attention "
-
-                    "to code quality, testing, "
-
-                    "and project conventions."
-
+                    "\n\nPlease pay extra attention to code quality, testing, and project conventions."
                 )
-
-            file = temp_markdown(body)
-
-            gh(
-
-                f'gh issue comment {issue_number} '
-
-                f'-R {ORG_NAME}/{repo} '
-
-                f'-F "{file}"'
-
-            )
-
-            os.remove(file)
-
-            success(
-
-                f"Assigned "
-
-                f"{repo}#{issue_number}"
-
-                f" -> @{winner}"
-
-            )
-
+            post_comment_once("issue", repo, issue_number, MARKERS["assignment_success"], body)
     CACHE["stats"]["assigned"] = assigned
-
     CACHE["stats"]["assignment_skipped"] = skipped
 
-    success(
 
-        f"Assignment engine complete."
-
-        f" Assigned={assigned}"
-
-        f" Skipped={skipped}"
-
-    )
-  # =============================================================================
-# LABEL ENGINE
-# =============================================================================
-
-def detect_difficulty(title, body):
-
-    text = f"{title}\n{body}".lower()
-
-    if re.search(r"\beasy\b", text):
-        return "Easy"
-
-    if re.search(r"\bmedium\b", text):
-        return "Medium"
-
-    if re.search(r"\bhard\b", text):
-        return "Hard"
-
-    return None
-
-
-def ensure_label(repo, label):
-
-    color = LABEL_COLORS.get(label, "ededed")
-
-    gh(
-        f'gh label create "{label}" '
-        f'-R {ORG_NAME}/{repo} '
-        f'--color "{color}"'
-    )
-
-
-def add_labels(repo, issue_number, labels):
-
-    if not labels:
-        return
-
-    label_string = ",".join(labels)
-
-    gh(
-        f'gh issue edit {issue_number} '
-        f'-R {ORG_NAME}/{repo} '
-        f'--add-label "{label_string}"'
-    )
-
-
-def remove_label(repo, issue_number, label):
-
-    gh(
-        f'gh issue edit {issue_number} '
-        f'-R {ORG_NAME}/{repo} '
-        f'--remove-label "{label}"'
-    )
-
-
-def normalize_labels(repo, issue_number, current_labels):
-
-    normalized = []
-
-    for label in current_labels:
-
-        fixed = normalize_label(label)
-
-        if fixed != label:
-
-            remove_label(
-                repo,
-                issue_number,
-                label
-            )
-
-            ensure_label(
-                repo,
-                fixed
-            )
-
-            normalized.append(fixed)
-
-            success(
-                f"{repo}#{issue_number}: "
-                f"{label} -> {fixed}"
-            )
-
-    if normalized:
-
-        add_labels(
-            repo,
-            issue_number,
-            normalized
-        )
-
-
-def label_issue_engine():
-
-    info("Running issue label engine...")
-
-    labeled = 0
-
-    for repo in CACHE["repositories"]:
-
-        issues = CACHE["issues"].get(repo, [])
-
-        for issue in issues:
-
-            issue_number = issue["number"]
-
-            title = issue["title"]
-
-            body = issue.get("body", "")
-
-            current_labels = [
-
-                l["name"]
-
-                for l in issue.get("labels", [])
-
-            ]
-
-            #
-            # Fix label casing first
-            #
-
-            normalize_labels(
-
-                repo,
-
-                issue_number,
-
-                current_labels
-
-            )
-
-            #
-            # Reload normalized labels
-            #
-
-            current_labels = [
-
-                normalize_label(l)
-
-                for l in current_labels
-
-            ]
-
-            labels_to_add = []
-
-            #
-            # Always ensure SSoC26 exists
-            #
-
-            if "SSoC26" not in current_labels:
-
-                ensure_label(
-
-                    repo,
-
-                    "SSoC26"
-
-                )
-
-                labels_to_add.append(
-
-                    "SSoC26"
-
-                )
-
-            #
-            # Difficulty detection
-            #
-
-            difficulty = detect_difficulty(
-
-                title,
-
-                body
-
-            )
-
-            if (
-
-                difficulty
-
-                and
-
-                difficulty not in current_labels
-
-            ):
-
-                ensure_label(
-
-                    repo,
-
-                    difficulty
-
-                )
-
-                labels_to_add.append(
-
-                    difficulty
-
-                )
-
-            #
-            # Apply labels
-            #
-
-            if labels_to_add:
-
-                add_labels(
-
-                    repo,
-
-                    issue_number,
-
-                    labels_to_add
-
-                )
-
-                labeled += 1
-
-                success(
-
-                    f"{repo}#{issue_number} "
-
-                    f"+ {labels_to_add}"
-
-                )
-
-    CACHE["stats"]["issue_labels"] = labeled
-
-    success(
-
-        f"Issue labeling complete "
-
-        f"({labeled} issues updated)."
-
-    )
-  # =============================================================================
-# PR LABEL ENGINE
-# =============================================================================
-
-ISSUE_REFERENCE_REGEX = re.compile(
-    r"(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)?\s*#(\d+)",
-    re.IGNORECASE,
-)
-
-
-def get_issue_labels(repo, issue_number):
-
-    #
-    # Prefer cache first.
-    #
-
-    issues = CACHE["issues"].get(repo, [])
-
-    for issue in issues:
-
-        if issue["number"] == issue_number:
-
-            return [
-
-                normalize_label(label["name"])
-
-                for label in issue.get("labels", [])
-
-            ]
-
-    #
-    # Closed issue.
-    #
-
-    result = gh_json(
-
-        f'gh issue view {issue_number} '
-        f'-R {ORG_NAME}/{repo} '
-        f'--json labels'
-
-    )
-
-    if not result:
-
-        return []
-
-    return [
-
-        normalize_label(label["name"])
-
-        for label in result["labels"]
-
-    ]
-
-
-def extract_issue_numbers(pr):
-
-    combined = (
-
-        pr.get("title", "")
-
-        + "\n"
-
-        + (pr.get("body") or "")
-
-    )
-
-    return sorted({
-
-        int(match)
-
-        for match
-
-        in ISSUE_REFERENCE_REGEX.findall(
-
-            combined
-
-        )
-
-    })
-
-
-def label_pull_request(
-
-    repo,
-
-    pr_number,
-
-    labels
-
-):
-
-    if not labels:
-
-        return
-
-    for label in labels:
-
-        ensure_label(
-
-            repo,
-
-            label
-
-        )
-
-    gh(
-
-        f'gh pr edit {pr_number} '
-
-        f'-R {ORG_NAME}/{repo} '
-
-        f'--add-label "{",".join(labels)}"'
-
-    )
-
-
-def pr_label_engine():
-
-    info("Running PR label engine...")
-
-    updated = 0
-
-    for repo in CACHE["repositories"]:
-
-        prs = CACHE["prs"].get(
-
-            repo,
-
-            []
-
-        )
-
-        for pr in prs:
-
-            #
-            # Ignore abandoned PRs.
-            #
-
-            if (
-
-                pr.get("state", "")
-
-                .lower()
-
-                == "closed"
-
-            ):
-
-                continue
-
-            pr_number = pr["number"]
-
-            current_labels = {
-
-                normalize_label(
-
-                    label["name"]
-
-                )
-
-                for label
-
-                in pr.get(
-
-                    "labels",
-
-                    []
-
-                )
-
-            }
-
-            issue_refs = extract_issue_numbers(
-
-                pr
-
-            )
-
-            labels_to_apply = set()
-
-            #
-            # Copy issue labels.
-            #
-
-            for issue_number in issue_refs:
-
-                issue_labels = get_issue_labels(
-
-                    repo,
-
-                    issue_number
-
-                )
-
-                for label in issue_labels:
-
-                    if (
-
-                        label == "SSoC26"
-
-                        or
-
-                        label in DIFFICULTIES
-
-                    ):
-
-                        labels_to_apply.add(
-
-                            label
-
-                        )
-
-            #
-            # Title fallback.
-            #
-
-            if (
-
-                "ssoc"
-
-                in pr["title"].lower()
-
-            ):
-
-                labels_to_apply.add(
-
-                    "SSoC26"
-
-                )
-
-            #
-            # Remove labels already present.
-            #
-
-            labels_to_apply = [
-
-                label
-
-                for label
-
-                in labels_to_apply
-
-                if label not in current_labels
-
-            ]
-
-            if not labels_to_apply:
-
-                continue
-
-            label_pull_request(
-
-                repo,
-
-                pr_number,
-
-                labels_to_apply
-
-            )
-
-            updated += 1
-
-            success(
-
-                f"{repo} PR #{pr_number}"
-
-                f" + {labels_to_apply}"
-
-            )
-
-            #
-            # Nice engagement comment.
-            #
-
-            body = (
-
-                "**SSoC26 Automation**\n\n"
-
-                "This pull request has been "
-
-                "automatically linked to the "
-
-                "labels of its corresponding "
-
-                "issue."
-
-            )
-
-            file = temp_markdown(
-
-                body
-
-            )
-
-            gh(
-
-                f'gh pr comment {pr_number} '
-
-                f'-R {ORG_NAME}/{repo} '
-
-                f'-F "{file}"'
-
-            )
-
-            os.remove(file)
-
-    CACHE["stats"]["pr_labels"] = updated
-
-    success(
-
-        f"Updated "
-
-        f"{updated} PRs."
-
-    )
-  # =============================================================================
-# DUMMY PR ENGINE
-# =============================================================================
-
-def find_dummy_pr(author, repo, pr_number, linked_issues):
-
-    context_prs = CACHE["prs"].get("Context", [])
-
-    repo = repo.lower()
-
-    for pr in context_prs:
-
-        pr_author = pr.get("author", {}).get("login", "").lower()
-
-        if pr_author != author.lower():
-            continue
-
-        combined = (
-
-            pr.get("title", "")
-
-            + "\n"
-
-            + (pr.get("body") or "")
-
-        ).lower()
-
-        #
-        # Direct reference
-        #
-
-        if f"{repo}#{pr_number}" in combined:
-            return pr
-
-        #
-        # Github URL
-        #
-
-        if f"github.com/memact/{repo}/pull/{pr_number}" in combined:
-            return pr
-
-        #
-        # Issue references
-        #
-
-        for issue in linked_issues:
-
-            if f"{repo}#{issue}" in combined:
-                return pr
-
-            if f"issue {issue}" in combined:
-                return pr
-
-            if f"#{issue}" in combined and repo in combined:
-                return pr
-
-    return None
-
-
-def comment_exists(pr_number, repo, prefix):
-
-    result = gh_json(
-
-        f'gh pr view {pr_number} '
-        f'-R {ORG_NAME}/{repo} '
-        f'--json comments'
-
-    )
-
-    if not result:
-
-        return False
-
-    for comment in result.get("comments", []):
-
-        if prefix in comment.get("body", ""):
-            return True
-
-    return False
-
-
-def dummy_pr_engine():
-
-    info("Running dummy PR engine...")
-
-    found = 0
-
-    warned = 0
-
-    for repo in CACHE["repositories"]:
-
-        #
-        # Context never needs dummy PRs.
-        #
-
-        if repo in ["Context", ".github"]:
-
-            continue
-
-        prs = CACHE["prs"].get(
-
-            repo,
-
-            []
-
-        )
-
-        for pr in prs:
-
-            state = pr.get(
-
-                "state",
-
-                ""
-
-            ).lower()
-
-            if state == "closed":
-
-                continue
-
-            pr_number = pr["number"]
-
-            author = pr["author"]["login"]
-
-            linked_issues = extract_issue_numbers(
-
-                pr
-
-            )
-
-            dummy = find_dummy_pr(
-
-                author,
-
-                repo,
-
-                pr_number,
-
-                linked_issues
-
-            )
-
-            #
-            # SUCCESS
-            #
-
-            if dummy:
-
-                dummy_number = dummy["number"]
-
-                found += 1
-
-                #
-                # Copy labels.
-                #
-
-                labels = [
-
-                    normalize_label(
-
-                        label["name"]
-
-                    )
-
-                    for label
-
-                    in pr.get(
-
-                        "labels",
-
-                        []
-
-                    )
-
-                    if normalize_label(
-
-                        label["name"]
-
-                    )
-
-                    in DIFFICULTIES
-
-                    or
-
-                    normalize_label(
-
-                        label["name"]
-
-                    )
-
-                    == "SSoC26"
-
-                ]
-
-                if labels:
-
-                    label_pull_request(
-
-                        "Context",
-
-                        dummy_number,
-
-                        labels
-
-                    )
-
-                prefix = "**SSoC26 Success:**"
-
-                if not comment_exists(
-
-                    pr_number,
-
-                    repo,
-
-                    prefix
-
-                ):
-
-                    body = (
-
-                        "**SSoC26 Success:**\n\n"
-
-                        "Dummy PR detected in "
-
-                        f"Context (#{dummy_number}).\n\n"
-
-                        "Contribution tracking "
-
-                        "has been verified."
-
-                    )
-
-                    file = temp_markdown(
-
-                        body
-
-                    )
-
-                    gh(
-
-                        f'gh pr comment '
-
-                        f'{pr_number} '
-
-                        f'-R {ORG_NAME}/{repo} '
-
-                        f'-F "{file}"'
-
-                    )
-
-                    os.remove(file)
-
-                continue
-
-            #
-            # WARNING
-            #
-
-            warned += 1
-
-            prefix = "**SSoC26 Warning:**"
-
-            if comment_exists(
-
-                pr_number,
-
-                repo,
-
-                prefix
-
-            ):
-
-                continue
-
-            body = (
-
-                "**SSoC26 Warning:**\n\n"
-
-                "No corresponding dummy PR "
-
-                "was found in "
-
-                "**Memact/Context**.\n\n"
-
-                "Please create one referencing "
-
-                f"`Memact/{repo}#{pr_number}` "
-
-                "so your contribution can "
-
-                "be tracked."
-
-            )
-
-            file = temp_markdown(
-
-                body
-
-            )
-
-            gh(
-
-                f'gh pr comment '
-
-                f'{pr_number} '
-
-                f'-R {ORG_NAME}/{repo} '
-
-                f'-F "{file}"'
-
-            )
-
-            os.remove(file)
-
-    CACHE["stats"]["dummy_found"] = found
-
-    CACHE["stats"]["dummy_warned"] = warned
-
-    success(
-
-        f"Dummy PR engine complete "
-
-        f"(found={found}, warned={warned})"
-
-    )
-  # =============================================================================
-# CODE QUALITY ENGINE
-# =============================================================================
-
-QUALITY_RULES = [
-
-    {
-        "name": "Debug Statements",
-        "label": "Quality: Needs Polish",
-        "pattern": re.compile(
-            r"(console\.log|console\.error|debugger)",
-            re.IGNORECASE
-        ),
-        "message": "Remove debugging statements."
-    },
-
-    {
-        "name": "TODO Marker",
-        "label": "Quality: Needs Polish",
-        "pattern": re.compile(
-            r"\b(TODO|FIXME|XXX)\b",
-            re.IGNORECASE
-        ),
-        "message": "Resolve TODO/FIXME markers."
-    },
-
-    {
-        "name": "Possible Secret",
-        "label": "Quality: Needs Polish",
-        "pattern": re.compile(
-            r"(api[_-]?key|secret|password|passwd|bearer|private[_-]?key)",
-            re.IGNORECASE
-        ),
-        "message": "Possible hardcoded credential detected."
-    }
-
-]
-
-
-def fetch_pr_diff(repo, number):
-
+def remove_assignee(repo: str, issue_number: int, username: str) -> bool:
     result = gh(
-
-        f'gh pr diff {number} '
-
-        f'-R {ORG_NAME}/{repo}'
-
+        [
+            "issue",
+            "edit",
+            str(issue_number),
+            "-R",
+            f"{ORG_NAME}/{repo}",
+            "--remove-assignee",
+            username,
+        ]
     )
-
-    if result.returncode != 0:
-
-        return ""
-
-    return result.stdout
-
-
-def analyze_diff(diff):
-
-    findings = []
-
-    for line in diff.splitlines():
-
-        #
-        # Only inspect added lines.
-        #
-
-        if not line.startswith("+"):
-
-            continue
-
-        #
-        # Ignore file headers.
-        #
-
-        if line.startswith("+++"):
-
-            continue
-
-        code = line[1:]
-
-        for rule in QUALITY_RULES:
-
-            if rule["pattern"].search(code):
-
-                findings.append({
-
-                    "rule": rule,
-
-                    "line": code.strip()
-
-                })
-
-    return findings
-
-
-def quality_comment(findings):
-
-    lines = [
-
-        "**SSoC26 Code Quality Warning**",
-
-        "",
-
-        "The automation detected some issues "
-
-        "that should be fixed before review.",
-
-        ""
-
-    ]
-
-    for finding in findings:
-
-        lines.append(
-
-            f"- **{finding['rule']['name']}**"
-
-        )
-
-        lines.append(
-
-            f"  `{finding['line']}`"
-
-        )
-
-        lines.append(
-
-            f"  {finding['rule']['message']}"
-
-        )
-
-        lines.append("")
-
-    lines.append(
-
-        "After fixing these issues the "
-
-        "warning label will be removed "
-
-        "automatically."
-
-    )
-
-    return "\n".join(lines)
-
-
-def code_quality_engine():
-
-    info("Running code quality engine...")
-
-    flagged = 0
-
-    cleaned = 0
-
-    for repo in CACHE["repositories"]:
-
-        prs = CACHE["prs"].get(
-
-            repo,
-
-            []
-
-        )
-
-        for pr in prs:
-
-            if (
-
-                pr.get("state", "")
-
-                .lower()
-
-                != "open"
-
-            ):
-
-                continue
-
-            pr_number = pr["number"]
-
-            diff = fetch_pr_diff(
-
-                repo,
-
-                pr_number
-
-            )
-
-            findings = analyze_diff(
-
-                diff
-
-            )
-
-            labels = {
-
-                normalize_label(
-
-                    l["name"]
-
-                )
-
-                for l
-
-                in pr.get(
-
-                    "labels",
-
-                    []
-
-                )
-
-            }
-
-            #
-            # Everything looks good.
-            #
-
-            if not findings:
-
-                if (
-
-                    "Quality: Needs Polish"
-
-                    in labels
-
-                ):
-
-                    gh(
-
-                        f'gh pr edit '
-
-                        f'{pr_number} '
-
-                        f'-R {ORG_NAME}/{repo} '
-
-                        f'--remove-label '
-
-                        f'"Quality: Needs Polish"'
-
-                    )
-
-                    cleaned += 1
-
-                continue
-
-            #
-            # Needs review.
-            #
-
-            ensure_label(
-
-                repo,
-
-                "Quality: Needs Polish"
-
-            )
-
-            gh(
-
-                f'gh pr edit '
-
-                f'{pr_number} '
-
-                f'-R {ORG_NAME}/{repo} '
-
-                f'--add-label '
-
-                f'"Quality: Needs Polish"'
-
-            )
-
-            if not comment_exists(
-
-                pr_number,
-
-                repo,
-
-                "**SSoC26 Code Quality Warning**"
-
-            ):
-
-                body = quality_comment(
-
-                    findings
-
-                )
-
-                file = temp_markdown(
-
-                    body
-
-                )
-
-                gh(
-
-                    f'gh pr comment '
-
-                    f'{pr_number} '
-
-                    f'-R {ORG_NAME}/{repo} '
-
-                    f'-F "{file}"'
-
-                )
-
-                os.remove(file)
-
-            flagged += 1
-
-            success(
-
-                f"{repo} PR #{pr_number} "
-
-                f"flagged "
-
-                f"({len(findings)} findings)"
-
-            )
-
-    CACHE["stats"]["quality_flagged"] = flagged
-
-    CACHE["stats"]["quality_cleaned"] = cleaned
-
-    success(
-
-        f"Quality engine complete "
-
-        f"(flagged={flagged}, cleaned={cleaned})"
-
-    )
-  # =============================================================================
-# UNASSIGNMENT ENGINE
-# =============================================================================
-
-def remove_assignee(repo, issue_number, username):
-
-    result = gh(
-
-        f'gh issue edit {issue_number} '
-        f'-R {ORG_NAME}/{repo} '
-        f'--remove-assignee {username}'
-
-    )
-
     return result.returncode == 0
 
 
-def latest_assignee_comment(issue, username):
-
+def latest_comment_by(issue: dict[str, Any], username: str) -> dict[str, Any] | None:
     comments = [
-
-        c
-
-        for c in issue.get("comments", [])
-
-        if c.get("author", {}).get("login", "").lower()
-
-        == username.lower()
-
+        comment
+        for comment in issue.get("comments", [])
+        if comment.get("author", {}).get("login", "").lower() == username.lower()
     ]
-
     if not comments:
-
         return None
-
-    comments.sort(
-
-        key=lambda x: x.get("createdAt", ""),
-
-        reverse=True
-
-    )
-
-    return comments[0]
+    return sorted(comments, key=lambda item: item.get("createdAt", ""), reverse=True)[0]
 
 
-def unassignment_engine():
-
-    info("Running unassignment engine...")
-
+def unassignment_engine() -> None:
     removed = 0
-
-    for repo in CACHE["repositories"]:
-
-        issues = CACHE["issues"].get(
-
-            repo,
-
-            []
-
-        )
-
+    for repo, issues in CACHE["issues"].items():
         for issue in issues:
-
-            issue_number = issue["number"]
-
-            assignees = list(
-
-                issue.get(
-
-                    "assignees",
-
-                    []
-
-                )
-
-            )
-
-            if not assignees:
-
-                continue
-
-            for assignee in assignees:
-
-                username = assignee["login"].lower()
-
-                latest = latest_assignee_comment(
-
-                    issue,
-
-                    username
-
-                )
-
-                if latest is None:
-
+            for assignee in issue.get("assignees", []):
+                username = assignee.get("login", "").lower()
+                latest = latest_comment_by(issue, username)
+                if not latest or not contains_negative_intent(latest.get("body", "")):
                     continue
-
-                body = latest.get(
-
-                    "body",
-
-                    ""
-
-                )
-
-                #
-                # Latest intent is still assignment.
-                #
-
-                if not contains_negative_intent(body):
-
-                    continue
-
-                #
-                # Remove assignment.
-                #
-
-                ok = remove_assignee(
-
-                    repo,
-
-                    issue_number,
-
-                    username
-
-                )
-
-                if not ok:
-
-                    warning(
-
-                        f"Could not unassign "
-
-                        f"{username}"
-
+                if remove_assignee(repo, issue["number"], username):
+                    CACHE["assignment_count"][username] = max(0, CACHE["assignment_count"][username] - 1)
+                    removed += 1
+                    post_comment_once(
+                        "issue",
+                        repo,
+                        issue["number"],
+                        MARKERS["unassign"],
+                        (
+                            f"Okay @{username}, you have been unassigned from this issue.\n\n"
+                            "If you want to work on it later, comment `/assign`."
+                        ),
                     )
-
-                    continue
-
-                #
-                # Update cache immediately.
-                #
-
-                CACHE["assignment_count"][
-
-                    username
-
-                ] = max(
-
-                    0,
-
-                    CACHE["assignment_count"][
-
-                        username
-
-                    ] - 1
-
-                )
-
-                CACHE["latest_intent"][
-
-                    repo
-
-                ][
-
-                    issue_number
-
-                ][
-
-                    username
-
-                ] = {
-
-                    "intent": "UNASSIGN",
-
-                    "timestamp": latest["createdAt"]
-
-                }
-
-                body = (
-
-                    f"Okay @{username} 👋\n\n"
-
-                    "You have been "
-
-                    "unassigned from this "
-
-                    "issue.\n\n"
-
-                    "If you ever want to "
-
-                    "work on it again, simply "
-
-                    "comment:\n\n"
-
-                    "`/assign`\n\n"
-
-                    "and the automation will "
-
-                    "consider you again."
-
-                )
-
-                file = temp_markdown(
-
-                    body
-
-                )
-
-                gh(
-
-                    f'gh issue comment '
-
-                    f'{issue_number} '
-
-                    f'-R {ORG_NAME}/{repo} '
-
-                    f'-F "{file}"'
-
-                )
-
-                os.remove(file)
-
-                removed += 1
-
-                success(
-
-                    f"Unassigned "
-
-                    f"@{username} "
-
-                    f"from "
-
-                    f"{repo}#{issue_number}"
-
-                )
-
     CACHE["stats"]["unassigned"] = removed
 
-    success(
 
-        f"Unassignment engine complete "
+def get_issue_timeline(repo: str, issue_number: int) -> list[dict[str, Any]]:
+    key = (repo, issue_number)
+    if key not in CACHE["timelines"]:
+        CACHE["timelines"][key] = gh_json(
+            ["api", f"repos/{ORG_NAME}/{repo}/issues/{issue_number}/timeline"]
+        ) or []
+    return CACHE["timelines"][key]
 
-        f"({removed} removed)."
 
-    )
-  # =============================================================================
-# STALE ASSIGNMENT ENGINE
-# =============================================================================
-
-def assignment_age(repo, issue_number, username):
-
-    result = gh_json(
-
-        f'gh api repos/{ORG_NAME}/{repo}/issues/{issue_number}/timeline'
-
-    )
-
-    if not result:
-
-        return None
-
+def assignment_time(repo: str, issue_number: int, username: str) -> dt.datetime | None:
     latest = None
-
-    for event in result:
-
+    for event in get_issue_timeline(repo, issue_number):
         if event.get("event") != "assigned":
             continue
-
-        assignee = event.get(
-
-            "assignee",
-
-            {}
-
-        ).get(
-
-            "login",
-
-            ""
-
-        ).lower()
-
+        assignee = event.get("assignee", {}).get("login", "").lower()
         if assignee != username.lower():
             continue
-
-        latest = datetime.datetime.fromisoformat(
-
-            event["created_at"].replace(
-
-                "Z",
-
-                "+00:00"
-
-            )
-
-        )
-
+        event_time = parse_github_time(event.get("created_at"))
+        if event_time and (latest is None or event_time > latest):
+            latest = event_time
     return latest
 
 
-def contributor_has_open_pr(
-
-    repo,
-
-    username,
-
-    issue_number
-
-):
-
-    #
-    # Search current repo.
-    #
-
-    repositories = [
-
-        repo,
-
-        "Context"
-
-    ]
-
-    pattern = re.compile(
-
-        rf"(#{issue_number}|issue\s*{issue_number})",
-
-        re.IGNORECASE
-
-    )
-
-    for r in repositories:
-
-        for pr in CACHE["prs"].get(
-
-            r,
-
-            []
-
-        ):
-
-            if (
-
-                pr.get(
-
-                    "state",
-
-                    ""
-
-                ).lower()
-
-                != "open"
-
-            ):
-
+def contributor_has_open_pr(repo: str, username: str, issue_number: int) -> bool:
+    pattern = issue_reference_pattern(repo, issue_number)
+    for candidate_repo in {repo, CONTEXT_REPO}:
+        for pr in CACHE["prs"].get(candidate_repo, []):
+            if pr.get("state", "").lower() != "open":
                 continue
-
-            author = pr.get(
-
-                "author",
-
-                {}
-
-            ).get(
-
-                "login",
-
-                ""
-
-            ).lower()
-
-            if author != username.lower():
-
+            if author_login(pr) != username.lower():
                 continue
-
-            text = (
-
-                pr.get(
-
-                    "title",
-
-                    ""
-
-                )
-
-                +
-
-                "\n"
-
-                +
-
-                (
-
-                    pr.get(
-
-                        "body"
-
-                    )
-
-                    or ""
-
-                )
-
-            )
-
+            text = f"{pr.get('title', '')}\n{pr.get('body') or ''}"
             if pattern.search(text):
-
                 return True
-
     return False
 
 
-def stale_comment_exists(
-
-    issue,
-
-    username
-
-):
-
-    for c in issue.get(
-
-        "comments",
-
-        []
-
-    ):
-
-        body = c.get(
-
-            "body",
-
-            ""
-
-        ).lower()
-
-        if (
-
-            username.lower()
-
-            in body
-
-            and
-
-            "just checking in"
-
-            in body
-
-        ):
-
-            return True
-
-    return False
-
-
-def stale_assignment_engine():
-
-    info(
-
-        "Running stale assignment engine..."
-
-    )
-
+def stale_assignment_engine() -> None:
     warned = 0
-
-    threshold = datetime.timedelta(
-
-        days=STALE_AFTER_DAYS
-
-    )
-
+    threshold = dt.timedelta(days=STALE_AFTER_DAYS)
     now = current_utc()
 
-    for repo in CACHE["repositories"]:
-
-        issues = CACHE["issues"].get(
-
-            repo,
-
-            []
-
-        )
-
+    for repo, issues in CACHE["issues"].items():
         for issue in issues:
-
-            issue_number = issue["number"]
-
-            assignees = issue.get(
-
-                "assignees",
-
-                []
-
-            )
-
-            if not assignees:
-
+            created_at = parse_github_time(issue.get("createdAt"))
+            if created_at and now - created_at <= threshold:
                 continue
-
-            for assignee in assignees:
-
-                username = assignee["login"]
-
-                #
-                # Exempt contributors.
-                #
-
-                if (
-
-                    username.lower()
-
-                    in EXEMPT_FROM_STALE
-
-                ):
-
+            for assignee in issue.get("assignees", []):
+                username = assignee.get("login", "")
+                if username.lower() in EXEMPT_FROM_STALE:
                     continue
-
-                assigned_at = assignment_age(
-
+                assigned_at = assignment_time(repo, issue["number"], username)
+                if assigned_at is None or now - assigned_at <= threshold:
+                    continue
+                if contributor_has_open_pr(repo, username, issue["number"]):
+                    continue
+                if post_comment_once(
+                    "issue",
                     repo,
-
-                    issue_number,
-
-                    username
-
-                )
-
-                if assigned_at is None:
-
-                    continue
-
-                if (
-
-                    now - assigned_at
-
-                    <= threshold
-
+                    issue["number"],
+                    MARKERS["stale"],
+                    (
+                        f"Hi @{username},\n\n"
+                        f"Just checking in. This issue has been assigned to you for more than "
+                        f"{STALE_AFTER_DAYS} days. If you are still working on it, no problem. "
+                        "Otherwise, please let us know so we can keep the backlog moving."
+                    ),
                 ):
-
-                    continue
-
-                #
-                # Already opened a PR.
-                #
-
-                if contributor_has_open_pr(
-
-                    repo,
-
-                    username,
-
-                    issue_number
-
-                ):
-
-                    continue
-
-                #
-                # Already warned.
-                #
-
-                if stale_comment_exists(
-
-                    issue,
-
-                    username
-
-                ):
-
-                    continue
-
-                body = (
-
-                    f"Hi @{username} 👋\n\n"
-
-                    "Just checking in!\n\n"
-
-                    f"This issue has been "
-
-                    f"assigned to you for "
-
-                    f"more than "
-
-                    f"**{STALE_AFTER_DAYS} days**.\n\n"
-
-                    "If you are still "
-
-                    "working on it, "
-
-                    "that is completely fine.\n\n"
-
-                    "Otherwise please let "
-
-                    "us know so we can "
-
-                    "keep the backlog "
-
-                    "moving.\n\n"
-
-                    "Thank you ❤️"
-
-                )
-
-                file = temp_markdown(
-
-                    body
-
-                )
-
-                gh(
-
-                    f'gh issue comment '
-
-                    f'{issue_number} '
-
-                    f'-R {ORG_NAME}/{repo} '
-
-                    f'-F "{file}"'
-
-                )
-
-                os.remove(file)
-
-                warned += 1
-
-                success(
-
-                    f"Stale reminder "
-
-                    f"{repo}#{issue_number}"
-
-                )
-
+                    warned += 1
     CACHE["stats"]["stale_warnings"] = warned
 
-    success(
 
-        f"Stale engine complete "
-
-        f"({warned} reminders)"
-
-    )
-  # =============================================================================
-# AUTO CLOSE ENGINE
-# =============================================================================
-
-def merged_prs():
-
-    merged = []
-
-    for repo in CACHE["repositories"]:
-
-        merged.extend(
-
-            CACHE["merged_prs"].get(
-
-                repo,
-
-                []
-
-            )
-
-        )
-
-    return merged
+def referenced_issues(repo: str, text: str) -> set[int]:
+    refs: set[int] = set()
+    for match in re.finditer(r"#(\d+)\b", text):
+        refs.add(int(match.group(1)))
+    org = re.escape(ORG_NAME)
+    repository = re.escape(repo)
+    for match in re.finditer(rf"{org}/{repository}#(\d+)\b", text, re.IGNORECASE):
+        refs.add(int(match.group(1)))
+    for match in re.finditer(rf"github\.com/{org}/{repository}/issues/(\d+)\b", text, re.IGNORECASE):
+        refs.add(int(match.group(1)))
+    return refs
 
 
-def issue_resolved_by_pr(
+def fetch_issue_labels(repo: str, issue_number: int) -> set[str]:
+    for issue in CACHE["issues"].get(repo, []):
+        if issue["number"] == issue_number:
+            return label_names(issue)
+    data = gh_json(["issue", "view", str(issue_number), "-R", f"{ORG_NAME}/{repo}", "--json", "labels"])
+    return {normalize_label(label.get("name", "")) for label in (data or {}).get("labels", [])}
 
-    repo,
 
-    issue_number
+def pr_label_engine() -> None:
+    updated = 0
+    for repo, prs in CACHE["prs"].items():
+        if repo not in CACHE["repositories"]:
+            continue
+        for pr in prs:
+            if pr.get("state", "").lower() != "open":
+                continue
+            pr_number = pr["number"]
+            pr_labels = sync_normalized_labels("pr", repo, pr_number, label_names(pr))
+            text = f"{pr.get('title', '')}\n{pr.get('body') or ''}"
+            labels_to_add: set[str] = set()
+            for issue_number in referenced_issues(repo, text):
+                for label in fetch_issue_labels(repo, issue_number):
+                    if label == "SSoC26" or label in DIFFICULTIES:
+                        labels_to_add.add(label)
+            if "ssoc" in pr.get("title", "").lower():
+                labels_to_add.add("SSoC26")
+            labels_to_add -= pr_labels
+            if labels_to_add and edit_labels("pr", repo, pr_number, add=sorted(labels_to_add)):
+                updated += 1
+                post_comment_once(
+                    "pr",
+                    repo,
+                    pr_number,
+                    MARKERS["pr_label"],
+                    "SSoC26 labels were synchronized from the linked issue.",
+                )
+    CACHE["stats"]["prs_labeled"] = updated
 
-):
 
-    pattern = re.compile(
+def find_dummy_pr(repo: str, pr: dict[str, Any]) -> dict[str, Any] | None:
+    username = author_login(pr)
+    pr_number = pr["number"]
+    text = f"{pr.get('title', '')}\n{pr.get('body') or ''}"
+    issue_refs = referenced_issues(repo, text)
+    pr_pattern = pr_reference_pattern(repo, pr_number)
+    issue_patterns = [issue_reference_pattern(repo, issue_number) for issue_number in issue_refs]
 
-        rf"(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)?\s*(?:Memact/{repo})?#?{issue_number}\b",
-
-        re.IGNORECASE
-
-    )
-
-    for pr in merged_prs():
-
-        text = (
-
-            pr.get("title", "")
-
-            +
-
-            "\n"
-
-            +
-
-            (
-
-                pr.get("body")
-
-                or ""
-
-            )
-
-        )
-
-        if pattern.search(text):
-
-            return pr
-
+    for context_pr in CACHE["prs"].get(CONTEXT_REPO, []):
+        if username and author_login(context_pr) != username:
+            continue
+        context_text = f"{context_pr.get('title', '')}\n{context_pr.get('body') or ''}"
+        if pr_pattern.search(context_text) or any(pattern.search(context_text) for pattern in issue_patterns):
+            return context_pr
     return None
 
 
-def close_issue(
-
-    repo,
-
-    issue_number,
-
-    pr_number
-
-):
-
-    return gh(
-
-        f'gh issue close '
-
-        f'{issue_number} '
-
-        f'-R {ORG_NAME}/{repo} '
-
-        f'-c '
-
-        f'"Automatically closed because '
-
-        f'PR #{pr_number} '
-
-        f'has been merged."'
-
-    ).returncode == 0
-
-
-def autoclose_engine():
-
-    info(
-
-        "Running auto-close engine..."
-
-    )
-
-    closed = 0
-
-    for repo in CACHE["repositories"]:
-
-        issues = CACHE["issues"].get(
-
-            repo,
-
-            []
-
-        )
-
-        for issue in issues:
-
-            issue_number = issue["number"]
-
-            merged = issue_resolved_by_pr(
-
-                repo,
-
-                issue_number
-
-            )
-
-            if merged is None:
-
+def dummy_pr_engine() -> None:
+    found = 0
+    warned = 0
+    for repo, prs in CACHE["prs"].items():
+        if repo in {CONTEXT_REPO, ".github"} or repo not in CACHE["repositories"]:
+            continue
+        for pr in prs:
+            if pr.get("state", "").lower() not in {"open", "merged"}:
                 continue
-
-            if close_issue(
-
-                repo,
-
-                issue_number,
-
-                merged["number"]
-
-            ):
-
-                closed += 1
-
-                success(
-
-                    f"Closed "
-
-                    f"{repo}#{issue_number}"
-
+            dummy_pr = find_dummy_pr(repo, pr)
+            if dummy_pr:
+                found += 1
+                source_labels = {label for label in label_names(pr) if label == "SSoC26" or label in DIFFICULTIES}
+                if not source_labels:
+                    source_labels.add("SSoC26")
+                dummy_labels = label_names(dummy_pr)
+                edit_labels(
+                    "pr",
+                    CONTEXT_REPO,
+                    dummy_pr["number"],
+                    add=sorted(source_labels - dummy_labels),
                 )
+                post_comment_once(
+                    "pr",
+                    repo,
+                    pr["number"],
+                    MARKERS["dummy_success"],
+                    f"Dummy PR detected in Memact/{CONTEXT_REPO} (#{dummy_pr['number']}).",
+                )
+            else:
+                warned += 1
+                post_comment_once(
+                    "pr",
+                    repo,
+                    pr["number"],
+                    MARKERS["dummy_warning"],
+                    (
+                        f"No corresponding dummy PR was found in Memact/{CONTEXT_REPO}. "
+                        f"Please create one referencing `Memact/{repo}#{pr['number']}` so this contribution can be tracked."
+                    ),
+                )
+    CACHE["stats"]["dummy_found"] = found
+    CACHE["stats"]["dummy_warned"] = warned
 
+
+def should_skip_diff_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lstrip("/")
+    name = normalized.rsplit("/", 1)[-1]
+    return name in SKIP_DIFF_FILES or normalized.startswith(SKIP_DIFF_PREFIXES)
+
+
+def fetch_pr_diff(repo: str, pr_number: int) -> str:
+    result = gh(["pr", "diff", str(pr_number), "-R", f"{ORG_NAME}/{repo}"], log_failure=False)
+    return result.stdout if result.returncode == 0 else ""
+
+
+def analyze_diff(diff: str) -> list[dict[str, str]]:
+    findings: list[dict[str, str]] = []
+    current_file = ""
+    for line in diff.splitlines():
+        if line.startswith("+++ b/"):
+            current_file = line[6:]
+            continue
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        if current_file and should_skip_diff_path(current_file):
+            continue
+        code = line[1:].strip()
+        if not code or code.startswith(("//", "#", "*")):
+            continue
+        for name, pattern, message, redact in QUALITY_RULES:
+            if pattern.search(code):
+                finding = {"rule": name, "file": current_file or "unknown", "message": message}
+                if not redact:
+                    finding["line"] = code[:180]
+                findings.append(finding)
+                break
+    return findings
+
+
+def quality_comment(findings: list[dict[str, str]]) -> str:
+    lines = [
+        "SSoC26 code quality check found items to clean up before review.",
+        "",
+    ]
+    for finding in findings[:20]:
+        detail = f"- {finding['rule']} in `{finding['file']}`: {finding['message']}"
+        if finding.get("line"):
+            detail += f" `{finding['line']}`"
+        lines.append(detail)
+    if len(findings) > 20:
+        lines.append(f"- {len(findings) - 20} additional finding(s) omitted.")
+    return "\n".join(lines)
+
+
+def update_or_post_pr_comment(repo: str, pr_number: int, marker: str, body: str) -> bool:
+    comments = fetch_pr_comments(repo, pr_number, refresh=True)
+    if bot_comment_exists(comments, marker):
+        bot_comments = [
+            comment
+            for comment in comments
+            if is_bot(comment.get("author", {}).get("login", "").lower())
+        ]
+        bot_comments.sort(key=lambda item: item.get("createdAt", ""), reverse=True)
+        if bot_comments and marker in (bot_comments[0].get("body") or ""):
+            with temp_markdown(f"{marker}\n{body}") as path:
+                result = gh(
+                    [
+                        "pr",
+                        "comment",
+                        str(pr_number),
+                        "-R",
+                        f"{ORG_NAME}/{repo}",
+                        "--edit-last",
+                        "-F",
+                        path,
+                    ]
+                )
+            return result.returncode == 0
+        return False
+    return post_comment_once("pr", repo, pr_number, marker, body)
+
+
+def code_quality_engine() -> None:
+    flagged = 0
+    cleaned = 0
+    for repo, prs in CACHE["prs"].items():
+        if repo not in CACHE["repositories"]:
+            continue
+        for pr in prs:
+            if pr.get("state", "").lower() != "open":
+                continue
+            labels = label_names(pr)
+            pr_number = pr["number"]
+            findings = analyze_diff(fetch_pr_diff(repo, pr_number))
+            if not findings:
+                if "Quality: Needs Polish" in labels:
+                    edit_labels("pr", repo, pr_number, remove=["Quality: Needs Polish"])
+                    cleaned += 1
+                continue
+            edit_labels("pr", repo, pr_number, add=["Quality: Needs Polish"])
+            update_or_post_pr_comment(repo, pr_number, MARKERS["quality"], quality_comment(findings))
+            flagged += 1
+    CACHE["stats"]["quality_flagged"] = flagged
+    CACHE["stats"]["quality_cleaned"] = cleaned
+
+
+def issue_resolved_by_pr(repo: str, issue_number: int) -> dict[str, Any] | None:
+    pattern = issue_reference_pattern(repo, issue_number, closing_keyword=True)
+    for pr in CACHE["merged_prs"].get(repo, []):
+        text = f"{pr.get('title', '')}\n{pr.get('body') or ''}"
+        if pattern.search(text):
+            return pr
+    return None
+
+
+def autoclose_engine() -> None:
+    closed = 0
+    for repo, issues in CACHE["issues"].items():
+        for issue in issues:
+            merged = issue_resolved_by_pr(repo, issue["number"])
+            if not merged:
+                continue
+            result = gh(
+                [
+                    "issue",
+                    "close",
+                    str(issue["number"]),
+                    "-R",
+                    f"{ORG_NAME}/{repo}",
+                    "-c",
+                    f"Automatically closed because PR #{merged['number']} has been merged.",
+                ]
+            )
+            if result.returncode == 0:
+                closed += 1
     CACHE["stats"]["issues_closed"] = closed
 
-    success(
 
-        f"Auto-close complete "
+def print_summary() -> None:
+    print()
+    print("=" * 70)
+    info("Automation summary")
+    print("=" * 70)
+    for key in [
+        "issues",
+        "prs",
+        "issue_labels_added",
+        "assigned",
+        "assignment_skipped",
+        "unassigned",
+        "stale_warnings",
+        "prs_labeled",
+        "dummy_found",
+        "dummy_warned",
+        "quality_flagged",
+        "quality_cleaned",
+        "issues_closed",
+    ]:
+        print(f"{key:24}: {CACHE['stats'].get(key, 0)}")
+    print("=" * 70)
 
-        f"({closed} issues closed)"
-    )
 
+def main() -> None:
+    start = time.time()
+    initialize()
+    fetch_repositories()
+    if not CACHE["repositories"]:
+        warning("No repositories selected for automation.")
+        return
+
+    fetch_all_issues()
+    fetch_all_pull_requests()
+    build_assignment_index()
+    build_intent_index()
+
+    label_issue_engine()
+    unassignment_engine()
+    assignment_engine()
+    stale_assignment_engine()
+    pr_label_engine()
+    dummy_pr_engine()
+    code_quality_engine()
+    autoclose_engine()
+
+    print_summary()
+    success(f"Completed in {round(time.time() - start, 2)} seconds.")
+
+
+if __name__ == "__main__":
+    main()
