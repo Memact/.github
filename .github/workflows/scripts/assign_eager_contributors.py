@@ -254,6 +254,7 @@ print(f"\nProcessing {len(requests_to_process)} collected requests globally by t
 requests_to_process.sort(key=lambda x: x["timestamp"])
 
 assigned_issues = set()
+first_requester_processed = set()
 skeptical_list = ["prasiddhi-105", "codesparks45", "prassidhi", "prasiddhi", "codesparks"]
 
 for req in requests_to_process:
@@ -267,6 +268,11 @@ for req in requests_to_process:
     issue_key = f"{repo}#{num}"
     if issue_key in assigned_issues:
         continue
+        
+    if issue_key in first_requester_processed:
+        print(f"Skipping later request for {issue_key} by @{user} to respect first commenter's priority.")
+        continue
+    first_requester_processed.add(issue_key)
         
     limit = 1 if user.lower() in skeptical_list else 10
     active_count = active_assignments.get(user.lower(), 0)
