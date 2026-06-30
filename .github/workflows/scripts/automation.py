@@ -42,6 +42,11 @@ PR_LIMIT = int(os.environ.get("PR_LIMIT", "1000"))
 AI_ENABLED = os.environ.get("AI_ENABLED", "true").lower() == "true"
 AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
 AI_MODEL = os.environ.get("AI_MODEL", "gemini-2.5-flash-lite").strip()
+AI_FALLBACK_MODELS = [
+    model.strip()
+    for model in os.environ.get("AI_FALLBACK_MODELS", "gemini-2.5-flash,gemini-2.0-flash-lite").split(",")
+    if model.strip()
+]
 AI_MIN_CONFIDENCE = int(os.environ.get("AI_MIN_CONFIDENCE", "90"))
 AI_AUTO_MERGE = os.environ.get("AI_AUTO_MERGE", "false").lower() == "true"
 AI_MERGE_METHOD = os.environ.get("AI_MERGE_METHOD", "squash").strip().lower()
@@ -1382,31 +1387,47 @@ class GeminiProvider(AIProvider):
     def review(self, prompt: str) -> dict[str, Any] | None:
         if not self.available():
             return None
-        for attempt in range(AI_RETRY_COUNT + 1):
-            try:
-                schema = AIReviewModel or AI_REVIEW_SCHEMA
-                response = self.client.models.generate_content(
-                    model=self.model,
-                    contents=prompt,
-                    config=genai_types.GenerateContentConfig(
-                        temperature=0.2,
-                        response_mime_type="application/json",
-                        response_schema=schema,
-                    ),
-                )
-                parsed = getattr(response, "parsed", None)
-                if parsed is not None and hasattr(parsed, "model_dump"):
-                    return parse_ai_review_data(parsed.model_dump())
-                return parse_ai_review_response(response.text or "")
-            except Exception as exc:
-                message = str(exc).lower()
-                if any(token in message for token in ("quota", "rate", "429", "resource_exhausted")):
-                    info("AI review skipped because provider quota or rate limit is unavailable.")
-                    return None
-                if attempt >= AI_RETRY_COUNT:
-                    info(f"AI review skipped because provider is unavailable ({exc.__class__.__name__}).")
-                    return None
-                time.sleep(AI_RETRY_BASE_SECONDS * (2 ** attempt))
+        models = []
+        for model in [self.model, *AI_FALLBACK_MODELS]:
+            if model and model not in models:
+                models.append(model)
+
+        for model in models:
+            for use_schema in (True, False):
+                for attempt in range(AI_RETRY_COUNT + 1):
+                    try:
+                        config_args = {
+                            "temperature": 0.2,
+                            "response_mime_type": "application/json",
+                        }
+                        if use_schema:
+                            config_args["response_schema"] = AIReviewModel or AI_REVIEW_SCHEMA
+                        response = self.client.models.generate_content(
+                            model=model,
+                            contents=prompt,
+                            config=genai_types.GenerateContentConfig(**config_args),
+                        )
+                        parsed = getattr(response, "parsed", None)
+                        if parsed is not None and hasattr(parsed, "model_dump"):
+                            parsed_review = parse_ai_review_data(parsed.model_dump())
+                            if parsed_review:
+                                return parsed_review
+                        parsed_review = parse_ai_review_response(response.text or "")
+                        if parsed_review:
+                            return parsed_review
+                    except Exception as exc:
+                        message = str(exc).lower()
+                        if any(token in message for token in ("quota", "rate", "429", "resource_exhausted")):
+                            info("AI review skipped because provider quota or rate limit is unavailable.")
+                            return None
+                        if attempt >= AI_RETRY_COUNT:
+                            info(
+                                "AI review provider attempt failed "
+                                f"(model={model}, schema={use_schema}, error={exc.__class__.__name__})."
+                            )
+                            break
+                        time.sleep(AI_RETRY_BASE_SECONDS * (2 ** attempt))
+        info("AI review skipped because all provider fallback attempts failed.")
         return None
 
 
