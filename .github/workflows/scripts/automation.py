@@ -45,7 +45,7 @@ AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
 AI_MODEL = os.environ.get("AI_MODEL", "gemini-2.5-flash-lite").strip()
 AI_FALLBACK_MODELS = [
     model.strip()
-    for model in os.environ.get("AI_FALLBACK_MODELS", "gemini-2.5-flash,gemini-2.0-flash-lite").split(",")
+    for model in os.environ.get("AI_FALLBACK_MODELS", "gemini-2.5-flash").split(",")
     if model.strip()
 ]
 AI_MIN_CONFIDENCE = int(os.environ.get("AI_MIN_CONFIDENCE", "90"))
@@ -1445,7 +1445,10 @@ class GeminiProvider(AIProvider):
                 models.append(model)
 
         for model in models:
+            model_quota_exhausted = False
             for use_schema in (True, False):
+                if model_quota_exhausted:
+                    break
                 for attempt in range(AI_RETRY_COUNT + 1):
                     try:
                         config_args = {
@@ -1470,10 +1473,11 @@ class GeminiProvider(AIProvider):
                     except Exception as exc:
                         if is_ai_quota_error(exc):
                             info(
-                                "AI review skipped because provider quota or rate limit was reached "
+                                "AI provider quota or rate limit reached for model; trying next model "
                                 f"(model={model}, schema={use_schema}, error={exc.__class__.__name__})."
                             )
-                            return None
+                            model_quota_exhausted = True
+                            break
                         transient = is_transient_ai_error(exc)
                         if not transient:
                             info(
