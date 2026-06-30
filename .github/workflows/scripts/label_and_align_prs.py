@@ -159,8 +159,8 @@ for repo in repos:
                 # Check for typos on issue labels
                 fix_label_typos(repo, num, labels, item_type="issue")
         
-        # 2. Fetch all open PRs in the repo
-        cmd_prs = f'gh pr list -R Memact/{repo} --state open --limit 100 --json number,title,body,labels,author'
+        # 2. Fetch all PRs in the repo (open, closed, merged)
+        cmd_prs = f'gh pr list -R Memact/{repo} --state all --limit 100 --json number,title,body,labels,author,state'
         res_prs = subprocess.run(cmd_prs, shell=True, capture_output=True, text=True, encoding='utf-8')
         if res_prs.returncode == 0 and res_prs.stdout:
             prs = json.loads(res_prs.stdout)
@@ -169,11 +169,13 @@ for repo in repos:
                 pr_title = pr["title"]
                 pr_body = pr.get("body", "") or ""
                 pr_labels = [l["name"] for l in pr.get("labels", [])]
+                pr_state = pr.get("state", "OPEN").lower()
                 
-                print(f"  Evaluating PR #{pr_num}: '{pr_title}'")
-                
-                # Check for typos on current PR labels
-                fix_label_typos(repo, pr_num, pr_labels, item_type="pr")
+                # Skip closed (unmerged) PRs
+                if pr_state == "closed":
+                    continue
+                    
+                print(f"  Evaluating PR #{pr_num} ({pr_state}): '{pr_title}'")
                 
                 # Parse references to issues in the PR body or title
                 # Look for formats like: #52, closes #52, fixes #52, resolve #52, etc.
@@ -183,91 +185,97 @@ for repo in repos:
                 referenced_issues = list(set(int(num) for num in issue_refs))
                 
                 labels_to_apply = []
-                if referenced_issues:
-                    print(f"    Linked issue references found: {referenced_issues}")
-                    
-                    # Gather labels from linked issues
-                    linked_labels = []
-                    for issue_num in referenced_issues:
-                        if issue_num in issues_dict:
-                            linked_labels.extend(issues_dict[issue_num])
-                        else:
-                            # If the issue is closed or not in open list, fetch its details directly
-                            cmd_view = f'gh issue view {issue_num} -R Memact/{repo} --json labels'
-                            res_view = subprocess.run(cmd_view, shell=True, capture_output=True, text=True, encoding='utf-8')
-                            if res_view.returncode == 0 and res_view.stdout:
-                                view_data = json.loads(res_view.stdout)
-                                linked_labels.extend([l["name"] for l in view_data.get("labels", [])])
-                    
-                    # Extract difficulty labels and SSoC26 tags
-                    for lbl in linked_labels:
-                        lbl_lower = lbl.lower()
-                        if lbl_lower == "ssoc26" and "SSoC26" not in pr_labels:
-                            labels_to_apply.append("SSoC26")
-                        elif lbl in ALLOWED_DIFFICULTIES and lbl not in pr_labels:
-                            labels_to_apply.append(lbl)
-                        elif lbl_lower in CORRECT_LABELS and CORRECT_LABELS[lbl_lower] not in pr_labels:
-                            labels_to_apply.append(CORRECT_LABELS[lbl_lower])
-                            
-                    # Apply matching SSoC26 and difficulty labels to the PR
-                    if labels_to_apply:
-                        labels_to_apply = list(set(labels_to_apply))
-                        
-                        # Preemptively create correct labels if they don't exist on this repo
-                        for lbl in labels_to_apply:
-                            col = LABEL_COLORS.get(lbl, "ededed")
-                            subprocess.run(f'gh label create "{lbl}" -R Memact/{repo} --color "{col}"', shell=True, capture_output=True)
-                            
-                        label_str = ",".join(labels_to_apply)
-                        cmd_pr_label = f'gh pr edit {pr_num} -R Memact/{repo} --add-label "{label_str}"'
-                        res_pr_label = subprocess.run(cmd_pr_label, shell=True, capture_output=True, text=True, encoding='utf-8')
-                        
-                        if res_pr_label.returncode == 0:
-                            print(f"    [SUCCESS] Labeled PR #{pr_num} with: {label_str}")
-                            # Post engagement comment
-                            body_msg = f"**SSoC26 Labeling:** This Pull Request has been automatically linked to the corresponding issue labels: `{label_str}`! Thank you for contributing!"
-                            post_github_comment(repo, pr_num, body_msg)
-                        else:
-                            print(f"    [FAILED] Could not label PR #{pr_num}: {res_pr_label.stderr.strip()}")
-                else:
-                    # If no issues are linked, we still check if we can add SSoC26 if the PR title mentions it
-                    if "ssoc" in pr_title.lower() and "SSoC26" not in pr_labels:
-                        # Create label if missing
-                        subprocess.run(f'gh label create "SSoC26" -R Memact/{repo} --color "ededed"', shell=True, capture_output=True)
-                        cmd_pr_label = f'gh pr edit {pr_num} -R Memact/{repo} --add-label "SSoC26"'
-                        subprocess.run(cmd_pr_label, shell=True, capture_output=True)
-                        print(f"    [SUCCESS] Added SSoC26 label to PR #{pr_num} based on title reference.")
-                        labels_to_apply.append("SSoC26")
                 
-                # --- Code Quality Check ---
-                quality_warnings = check_pr_code_quality(repo, pr_num)
-                if quality_warnings:
-                    print(f"    [WARNING] PR #{pr_num} failed code quality checks: {quality_warnings}")
-                    # Apply Quality Warning label
-                    col = "d93f0b"
-                    subprocess.run(f'gh label create "Quality: Needs Polish" -R Memact/{repo} --color "{col}"', shell=True, capture_output=True)
-                    cmd_label = f'gh pr edit {pr_num} -R Memact/{repo} --add-label "Quality: Needs Polish"'
-                    subprocess.run(cmd_label, shell=True, capture_output=True)
+                # Only check typos, apply labels, and verify quality for open PRs
+                if pr_state == "open":
+                    # Check for typos on current PR labels
+                    fix_label_typos(repo, pr_num, pr_labels, item_type="pr")
                     
-                    # Post warning comment if not already posted
-                    cmd_comments = f'gh pr view {pr_num} -R Memact/{repo} --json comments'
-                    res_comments = subprocess.run(cmd_comments, shell=True, capture_output=True, text=True, encoding='utf-8')
-                    comments = []
-                    if res_comments.returncode == 0 and res_comments.stdout:
-                        comments = json.loads(res_comments.stdout).get("comments", [])
-                    comment_bodies = [c["body"] for c in comments]
+                    if referenced_issues:
+                        print(f"    Linked issue references found: {referenced_issues}")
+                        
+                        # Gather labels from linked issues
+                        linked_labels = []
+                        for issue_num in referenced_issues:
+                            if issue_num in issues_dict:
+                                linked_labels.extend(issues_dict[issue_num])
+                            else:
+                                # If the issue is closed or not in open list, fetch its details directly
+                                cmd_view = f'gh issue view {issue_num} -R Memact/{repo} --json labels'
+                                res_view = subprocess.run(cmd_view, shell=True, capture_output=True, text=True, encoding='utf-8')
+                                if res_view.returncode == 0 and res_view.stdout:
+                                    view_data = json.loads(res_view.stdout)
+                                    linked_labels.extend([l["name"] for l in view_data.get("labels", [])])
+                        
+                        # Extract difficulty labels and SSoC26 tags
+                        for lbl in linked_labels:
+                            lbl_lower = lbl.lower()
+                            if lbl_lower == "ssoc26" and "SSoC26" not in pr_labels:
+                                labels_to_apply.append("SSoC26")
+                            elif lbl in ALLOWED_DIFFICULTIES and lbl not in pr_labels:
+                                labels_to_apply.append(lbl)
+                            elif lbl_lower in CORRECT_LABELS and CORRECT_LABELS[lbl_lower] not in pr_labels:
+                                labels_to_apply.append(CORRECT_LABELS[lbl_lower])
+                                
+                        # Apply matching SSoC26 and difficulty labels to the PR
+                        if labels_to_apply:
+                            labels_to_apply = list(set(labels_to_apply))
+                            
+                            # Preemptively create correct labels if they don't exist on this repo
+                            for lbl in labels_to_apply:
+                                col = LABEL_COLORS.get(lbl, "ededed")
+                                subprocess.run(f'gh label create "{lbl}" -R Memact/{repo} --color "{col}"', shell=True, capture_output=True)
+                                
+                            label_str = ",".join(labels_to_apply)
+                            cmd_pr_label = f'gh pr edit {pr_num} -R Memact/{repo} --add-label "{label_str}"'
+                            res_pr_label = subprocess.run(cmd_pr_label, shell=True, capture_output=True, text=True, encoding='utf-8')
+                            
+                            if res_pr_label.returncode == 0:
+                                print(f"    [SUCCESS] Labeled PR #{pr_num} with: {label_str}")
+                                # Post engagement comment
+                                body_msg = f"**SSoC26 Labeling:** This Pull Request has been automatically linked to the corresponding issue labels: `{label_str}`! Thank you for contributing!"
+                                post_github_comment(repo, pr_num, body_msg)
+                            else:
+                                print(f"    [FAILED] Could not label PR #{pr_num}: {res_pr_label.stderr.strip()}")
+                    else:
+                        # If no issues are linked, we still check if we can add SSoC26 if the PR title mentions it
+                        if "ssoc" in pr_title.lower() and "SSoC26" not in pr_labels:
+                            # Create label if missing
+                            subprocess.run(f'gh label create "SSoC26" -R Memact/{repo} --color "ededed"', shell=True, capture_output=True)
+                            cmd_pr_label = f'gh pr edit {pr_num} -R Memact/{repo} --add-label "SSoC26"'
+                            subprocess.run(cmd_pr_label, shell=True, capture_output=True)
+                            print(f"    [SUCCESS] Added SSoC26 label to PR #{pr_num} based on title reference.")
+                            labels_to_apply.append("SSoC26")
                     
-                    warn_prefix = "**SSoC26 Code Quality Warning:**"
-                    already_warned = any(warn_prefix in b for b in comment_bodies)
-                    if not already_warned:
-                        warning_lines = "\n".join([f"- {w}" for w in quality_warnings])
-                        body_msg = f"{warn_prefix} We detected some potential code quality or formatting issues in your changes:\n\n{warning_lines}\n\nPlease clean these up before requesting a merge review. Thank you!"
-                        post_github_comment(repo, pr_num, body_msg)
-                else:
-                    if "Quality: Needs Polish" in pr_labels:
-                        print(f"    [CLEAN] PR #{pr_num} passed quality checks. Removing 'Quality: Needs Polish' label.")
-                        cmd_remove = f'gh pr edit {pr_num} -R Memact/{repo} --remove-label "Quality: Needs Polish"'
-                        subprocess.run(cmd_remove, shell=True, capture_output=True)
+                    # --- Code Quality Check ---
+                    quality_warnings = check_pr_code_quality(repo, pr_num)
+                    if quality_warnings:
+                        print(f"    [WARNING] PR #{pr_num} failed code quality checks: {quality_warnings}")
+                        # Apply Quality Warning label
+                        col = "d93f0b"
+                        subprocess.run(f'gh label create "Quality: Needs Polish" -R Memact/{repo} --color "{col}"', shell=True, capture_output=True)
+                        cmd_label = f'gh pr edit {pr_num} -R Memact/{repo} --add-label "Quality: Needs Polish"'
+                        subprocess.run(cmd_label, shell=True, capture_output=True)
+                        
+                        # Post warning comment if not already posted
+                        cmd_comments = f'gh pr view {pr_num} -R Memact/{repo} --json comments'
+                        res_comments = subprocess.run(cmd_comments, shell=True, capture_output=True, text=True, encoding='utf-8')
+                        comments = []
+                        if res_comments.returncode == 0 and res_comments.stdout:
+                            comments = json.loads(res_comments.stdout).get("comments", [])
+                        comment_bodies = [c["body"] for c in comments]
+                        
+                        warn_prefix = "**SSoC26 Code Quality Warning:**"
+                        already_warned = any(warn_prefix in b for b in comment_bodies)
+                        if not already_warned:
+                            warning_lines = "\n".join([f"- {w}" for w in quality_warnings])
+                            body_msg = f"{warn_prefix} We detected some potential code quality or formatting issues in your changes:\n\n{warning_lines}\n\nPlease clean these up before requesting a merge review. Thank you!"
+                            post_github_comment(repo, pr_num, body_msg)
+                    else:
+                        if "Quality: Needs Polish" in pr_labels:
+                            print(f"    [CLEAN] PR #{pr_num} passed quality checks. Removing 'Quality: Needs Polish' label.")
+                            cmd_remove = f'gh pr edit {pr_num} -R Memact/{repo} --remove-label "Quality: Needs Polish"'
+                            subprocess.run(cmd_remove, shell=True, capture_output=True)
                 
                 # --- Dummy PR Automation Check ---
                 if repo not in ["Context", ".github"]:
