@@ -12,6 +12,7 @@ import datetime as dt
 import base64
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -52,9 +53,12 @@ AI_AUTO_MERGE = os.environ.get("AI_AUTO_MERGE", "false").lower() == "true"
 AI_MERGE_METHOD = os.environ.get("AI_MERGE_METHOD", "squash").strip().lower()
 AI_REVIEW_DRAFT_PRS = os.environ.get("AI_REVIEW_DRAFT_PRS", "false").lower() == "true"
 AI_REVIEW_ON_SCHEDULE = os.environ.get("AI_REVIEW_ON_SCHEDULE", "false").lower() == "true"
-AI_MAX_DIFF_CHARS = int(os.environ.get("AI_MAX_DIFF_CHARS", "12000"))
-AI_RETRY_COUNT = int(os.environ.get("AI_RETRY_COUNT", "2"))
+AI_MAX_DIFF_CHARS = int(os.environ.get("AI_MAX_DIFF_CHARS", "8000"))
+AI_RETRY_COUNT = int(os.environ.get("AI_RETRY_COUNT", "4"))
 AI_RETRY_BASE_SECONDS = float(os.environ.get("AI_RETRY_BASE_SECONDS", "2"))
+AI_RETRY_MAX_SECONDS = float(os.environ.get("AI_RETRY_MAX_SECONDS", "20"))
+AI_RETRY_JITTER_SECONDS = float(os.environ.get("AI_RETRY_JITTER_SECONDS", "1.5"))
+AI_REQUEST_COOLDOWN_SECONDS = float(os.environ.get("AI_REQUEST_COOLDOWN_SECONDS", "10"))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 
 EXCLUDED_REPOSITORIES = {"Website", "oldWebsite"}
@@ -321,6 +325,38 @@ def claim_mutation(key: str) -> bool:
         return False
     CACHE["mutation_keys"].add(key)
     return True
+
+
+def retry_delay(attempt: int) -> float:
+    base = min(AI_RETRY_MAX_SECONDS, AI_RETRY_BASE_SECONDS * (2 ** attempt))
+    jitter = random.uniform(0, AI_RETRY_JITTER_SECONDS) if AI_RETRY_JITTER_SECONDS > 0 else 0
+    return base + jitter
+
+
+def is_transient_ai_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    return (
+        status in {429, 500, 502, 503, 504}
+        or any(
+            token in message
+            for token in (
+                "503",
+                "service unavailable",
+                "servererror",
+                "server error",
+                "overload",
+                "overloaded",
+                "unavailable",
+                "deadline",
+                "timeout",
+                "quota",
+                "rate",
+                "429",
+                "resource_exhausted",
+            )
+        )
+    )
 
 
 def gh(args: list[str], *, log_failure: bool = True) -> subprocess.CompletedProcess[str]:
@@ -1416,17 +1452,22 @@ class GeminiProvider(AIProvider):
                         if parsed_review:
                             return parsed_review
                     except Exception as exc:
-                        message = str(exc).lower()
-                        if any(token in message for token in ("quota", "rate", "429", "resource_exhausted")):
-                            info("AI review skipped because provider quota or rate limit is unavailable.")
-                            return None
+                        transient = is_transient_ai_error(exc)
                         if attempt >= AI_RETRY_COUNT:
                             info(
                                 "AI review provider attempt failed "
-                                f"(model={model}, schema={use_schema}, error={exc.__class__.__name__})."
+                                f"(model={model}, schema={use_schema}, transient={transient}, "
+                                f"error={exc.__class__.__name__})."
                             )
                             break
-                        time.sleep(AI_RETRY_BASE_SECONDS * (2 ** attempt))
+                        delay = retry_delay(attempt)
+                        if transient:
+                            info(
+                                "AI provider transient failure; retrying "
+                                f"(model={model}, schema={use_schema}, attempt={attempt + 1}, "
+                                f"delay={round(delay, 1)}s)."
+                            )
+                        time.sleep(delay)
         info("AI review skipped because all provider fallback attempts failed.")
         return None
 
@@ -1576,6 +1617,7 @@ def ai_review_engine() -> None:
     if provider is None:
         return
 
+    ai_calls_attempted = 0
     for repo, prs in CACHE["prs"].items():
         if repo not in CACHE["repositories"]:
             continue
@@ -1606,6 +1648,10 @@ def ai_review_engine() -> None:
             if not diff.strip():
                 CACHE["stats"]["ai_skipped"] += 1
                 continue
+            if ai_calls_attempted and AI_REQUEST_COOLDOWN_SECONDS > 0:
+                info(f"Cooling down before next AI request ({AI_REQUEST_COOLDOWN_SECONDS}s).")
+                time.sleep(AI_REQUEST_COOLDOWN_SECONDS)
+            ai_calls_attempted += 1
             review = provider.review(ai_review_prompt(repo, pr, diff))
             if review is None:
                 CACHE["stats"]["ai_skipped"] += 1
