@@ -45,7 +45,7 @@ env:
   AI_AUTO_MERGE: "false"
   AI_MERGE_METHOD: squash
   AI_REVIEW_DRAFT_PRS: "false"
-  AI_REVIEW_ON_SCHEDULE: "false"
+  AI_REVIEW_ON_SCHEDULE: "true"
 
 jobs:
   automation:

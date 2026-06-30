@@ -281,6 +281,10 @@ def error(message: str) -> None:
     print(f"[ERROR] {message}", file=sys.stderr)
 
 
+def action(message: str) -> None:
+    print(f"[ACTION] {message}")
+
+
 def gh(args: list[str], *, log_failure: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         ["gh", *args],
@@ -672,6 +676,8 @@ def label_issue_engine() -> None:
                 to_add.append(difficulty)
             if edit_labels("issue", repo, issue["number"], add=to_add):
                 added += len(to_add)
+                if to_add:
+                    action(f"issue_labels_added repo={repo} issue=#{issue['number']} labels={','.join(to_add)}")
     CACHE["stats"]["issue_labels_added"] = added
 
 
@@ -736,14 +742,16 @@ def assign_user(repo: str, issue_number: int, username: str) -> bool:
 
 def assignment_engine() -> None:
     assigned = 0
-    skipped = 0
+    skipped_already_assigned = 0
+    skipped_limit = 0
+    skipped_race = 0
     for repo, issue_states in CACHE["latest_intent"].items():
         for issue_number, users in issue_states.items():
             fresh_issue = fetch_issue(repo, issue_number)
             if not fresh_issue:
                 continue
             if fresh_issue.get("assignees"):
-                skipped += 1
+                skipped_already_assigned += 1
                 continue
 
             candidates = [
@@ -760,7 +768,7 @@ def assignment_engine() -> None:
             limit = assignment_limit(winner)
 
             if active >= limit:
-                skipped += 1
+                skipped_limit += 1
                 post_comment_once(
                     "issue",
                     repo,
@@ -776,13 +784,14 @@ def assignment_engine() -> None:
 
             fresh_issue = fetch_issue(repo, issue_number)
             if not fresh_issue or fresh_issue.get("assignees"):
-                skipped += 1
+                skipped_race += 1
                 continue
             if not assign_user(repo, issue_number, winner):
                 continue
 
             CACHE["assignment_count"][winner] += 1
             assigned += 1
+            action(f"assigned repo={repo} issue=#{issue_number} user=@{winner}")
             body = (
                 f"Hey @{winner},\n\n"
                 "You have been assigned this issue for SSoC26. Looking forward to your PR."
@@ -793,7 +802,9 @@ def assignment_engine() -> None:
                 )
             post_comment_once("issue", repo, issue_number, MARKERS["assignment_success"], body)
     CACHE["stats"]["assigned"] = assigned
-    CACHE["stats"]["assignment_skipped"] = skipped
+    CACHE["stats"]["assignment_skipped_already_assigned"] = skipped_already_assigned
+    CACHE["stats"]["assignment_skipped_limit"] = skipped_limit
+    CACHE["stats"]["assignment_skipped_race"] = skipped_race
 
 
 def remove_assignee(repo: str, issue_number: int, username: str) -> bool:
@@ -834,6 +845,7 @@ def unassignment_engine() -> None:
                 if remove_assignee(repo, issue["number"], username):
                     CACHE["assignment_count"][username] = max(0, CACHE["assignment_count"][username] - 1)
                     removed += 1
+                    action(f"unassigned repo={repo} issue=#{issue['number']} user=@{username}")
                     post_comment_once(
                         "issue",
                         repo,
@@ -885,6 +897,7 @@ def contributor_has_open_pr(repo: str, username: str, issue_number: int) -> bool
 
 
 def stale_assignment_engine() -> None:
+    stale_detected = 0
     warned = 0
     threshold = dt.timedelta(days=STALE_AFTER_DAYS)
     now = current_utc()
@@ -903,6 +916,7 @@ def stale_assignment_engine() -> None:
                     continue
                 if contributor_has_open_pr(repo, username, issue["number"]):
                     continue
+                stale_detected += 1
                 if post_comment_once(
                     "issue",
                     repo,
@@ -916,7 +930,9 @@ def stale_assignment_engine() -> None:
                     ),
                 ):
                     warned += 1
-    CACHE["stats"]["stale_warnings"] = warned
+                    action(f"stale_warning_posted repo={repo} issue=#{issue['number']} user=@{username}")
+    CACHE["stats"]["stale_detected"] = stale_detected
+    CACHE["stats"]["stale_warnings_posted"] = warned
 
 
 def referenced_issues(repo: str, text: str) -> set[int]:
@@ -961,13 +977,15 @@ def pr_label_engine() -> None:
             labels_to_add -= pr_labels
             if labels_to_add and edit_labels("pr", repo, pr_number, add=sorted(labels_to_add)):
                 updated += 1
-                post_comment_once(
+                action(f"pr_labels_added repo={repo} pr=#{pr_number} labels={','.join(sorted(labels_to_add))}")
+                if post_comment_once(
                     "pr",
                     repo,
                     pr_number,
                     MARKERS["pr_label"],
                     "SSoC26 labels were synchronized from the linked issue.",
-                )
+                ):
+                    CACHE["stats"]["pr_label_comments_posted"] += 1
     CACHE["stats"]["prs_labeled"] = updated
 
 
@@ -990,7 +1008,9 @@ def find_dummy_pr(repo: str, pr: dict[str, Any]) -> dict[str, Any] | None:
 
 def dummy_pr_engine() -> None:
     found = 0
-    warned = 0
+    missing = 0
+    success_comments = 0
+    warning_comments = 0
     for repo, prs in CACHE["prs"].items():
         if repo in {CONTEXT_REPO, ".github"} or repo not in CACHE["repositories"]:
             continue
@@ -1010,16 +1030,18 @@ def dummy_pr_engine() -> None:
                     dummy_pr["number"],
                     add=sorted(source_labels - dummy_labels),
                 )
-                post_comment_once(
+                action(f"dummy_pr_found repo={repo} pr=#{pr['number']} context_pr=#{dummy_pr['number']}")
+                if post_comment_once(
                     "pr",
                     repo,
                     pr["number"],
                     MARKERS["dummy_success"],
                     f"Dummy PR detected in Memact/{CONTEXT_REPO} (#{dummy_pr['number']}).",
-                )
+                ):
+                    success_comments += 1
             else:
-                warned += 1
-                post_comment_once(
+                missing += 1
+                if post_comment_once(
                     "pr",
                     repo,
                     pr["number"],
@@ -1028,9 +1050,13 @@ def dummy_pr_engine() -> None:
                         f"No corresponding dummy PR was found in Memact/{CONTEXT_REPO}. "
                         f"Please create one referencing `Memact/{repo}#{pr['number']}` so this contribution can be tracked."
                     ),
-                )
+                ):
+                    warning_comments += 1
+                    action(f"dummy_warning_posted repo={repo} pr=#{pr['number']}")
     CACHE["stats"]["dummy_found"] = found
-    CACHE["stats"]["dummy_warned"] = warned
+    CACHE["stats"]["dummy_missing"] = missing
+    CACHE["stats"]["dummy_success_comments_posted"] = success_comments
+    CACHE["stats"]["dummy_warning_comments_posted"] = warning_comments
 
 
 def should_skip_diff_path(path: str) -> bool:
@@ -1146,7 +1172,7 @@ def should_run_ai_review_for_event() -> bool:
     if not AI_ENABLED:
         return False
     event_name = os.environ.get("GITHUB_EVENT_NAME", "")
-    if event_name == "schedule":
+    if event_name in {"schedule", "workflow_dispatch"}:
         return AI_REVIEW_ON_SCHEDULE
     if event_name != "pull_request":
         return False
@@ -1164,6 +1190,18 @@ def ai_review_exists_for_sha(comments: list[dict[str, Any]], sha: str) -> bool:
         body = comment.get("body") or ""
         if is_bot(username) and marker in body and sha_line in body:
             return True
+    return False
+
+
+def post_ai_review_comment(repo: str, pr_number: int, sha: str, body: str) -> bool:
+    comments = fetch_pr_comments(repo, pr_number, refresh=True)
+    if ai_review_exists_for_sha(comments, sha):
+        return False
+    with temp_markdown(f"{MARKERS['ai_review']}\n{body}") as path:
+        result = gh(["pr", "comment", str(pr_number), "-R", f"{ORG_NAME}/{repo}", "-F", path])
+    if result.returncode == 0:
+        fetch_pr_comments(repo, pr_number, refresh=True)
+        return True
     return False
 
 
@@ -1281,10 +1319,10 @@ class GeminiProvider(AIProvider):
             except Exception as exc:
                 message = str(exc).lower()
                 if any(token in message for token in ("quota", "rate", "429", "resource_exhausted")):
-                    warning("Gemini quota or rate limit reached; skipping AI review without commenting.")
+                    info("AI review skipped because provider quota or rate limit is unavailable.")
                     return None
                 if attempt >= AI_RETRY_COUNT:
-                    warning("Gemini review unavailable; skipping AI review without commenting.")
+                    info("AI review skipped because provider is unavailable.")
                     return None
                 time.sleep(AI_RETRY_BASE_SECONDS * (2 ** attempt))
         return None
@@ -1434,6 +1472,10 @@ def ai_review_engine() -> None:
         for pr in prs:
             if pr.get("state", "").lower() != "open":
                 continue
+            if repo == CONTEXT_REPO and "dummy" in f"{pr.get('title', '')}\n{pr.get('body') or ''}".lower():
+                CACHE["stats"]["ai_skipped"] += 1
+                action(f"ai_review_skipped_dummy_tracking_pr repo={repo} pr=#{pr.get('number')}")
+                continue
             if pr.get("isDraft") and not AI_REVIEW_DRAFT_PRS:
                 CACHE["stats"]["ai_skipped"] += 1
                 continue
@@ -1459,8 +1501,9 @@ def ai_review_engine() -> None:
                 CACHE["stats"]["ai_skipped"] += 1
                 continue
             CACHE["ai_reviews"][(repo, pr_number, sha)] = review
-            if post_comment_once("pr", repo, pr_number, MARKERS["ai_review"], format_ai_review_comment(review, sha)):
+            if post_ai_review_comment(repo, pr_number, sha, format_ai_review_comment(review, sha)):
                 CACHE["stats"]["ai_reviewed"] += 1
+                action(f"ai_review_posted repo={repo} pr=#{pr_number} sha={sha[:12]}")
 
 
 def ci_successful(pr: dict[str, Any]) -> bool:
@@ -1603,12 +1646,18 @@ def print_summary() -> None:
         "prs",
         "issue_labels_added",
         "assigned",
-        "assignment_skipped",
+        "assignment_skipped_already_assigned",
+        "assignment_skipped_limit",
+        "assignment_skipped_race",
         "unassigned",
-        "stale_warnings",
+        "stale_detected",
+        "stale_warnings_posted",
         "prs_labeled",
+        "pr_label_comments_posted",
         "dummy_found",
-        "dummy_warned",
+        "dummy_missing",
+        "dummy_success_comments_posted",
+        "dummy_warning_comments_posted",
         "quality_flagged",
         "quality_cleaned",
         "ai_reviewed",
