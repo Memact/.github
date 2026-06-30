@@ -124,11 +124,13 @@ def check_pr_code_quality(repo, pr_num):
 
 # Fetch all Context PRs (open and closed) to match dummy PRs
 context_prs = []
+context_merged_prs = []
 print("Fetching all PRs from Memact/Context to match dummy PRs...")
-cmd_context_prs = 'gh pr list -R Memact/Context --state all --limit 150 --json number,title,body,author,labels,url'
+cmd_context_prs = 'gh pr list -R Memact/Context --state all --limit 150 --json number,title,body,author,labels,url,state'
 res_context_prs = subprocess.run(cmd_context_prs, shell=True, capture_output=True, text=True, encoding='utf-8')
 if res_context_prs.returncode == 0 and res_context_prs.stdout:
     context_prs = json.loads(res_context_prs.stdout)
+    context_merged_prs = [pr for pr in context_prs if pr.get("state") in ["MERGED", "merged"]]
     print(f"Loaded {len(context_prs)} Context PRs for dummy PR matching.")
 else:
     print(f"Warning: Failed to fetch Context PRs: {res_context_prs.stderr}")
@@ -137,6 +139,13 @@ for repo in repos:
     try:
         print(f"\nProcessing Memact/{repo}...")
         
+        # Fetch merged PRs in this repo
+        cmd_merged_prs = f'gh pr list -R Memact/{repo} --state merged --limit 100 --json number,title,body'
+        res_merged_prs = subprocess.run(cmd_merged_prs, shell=True, capture_output=True, text=True, encoding='utf-8')
+        merged_prs = []
+        if res_merged_prs.returncode == 0 and res_merged_prs.stdout:
+            merged_prs = json.loads(res_merged_prs.stdout)
+            
         # 1. Fetch all open issues in the repo
         cmd_issues = f'gh issue list -R Memact/{repo} --state open --limit 100 --json number,title,labels'
         res_issues = subprocess.run(cmd_issues, shell=True, capture_output=True, text=True, encoding='utf-8')
@@ -348,6 +357,28 @@ for repo in repos:
                             body_msg = f"{warning_msg_prefix} in the main [Context](https://github.com/Memact/Context) repository yet.\n\nBecause this contribution is in a sub-repository, you **must** open a dummy PR in `Memact/Context` linking to this PR (e.g., by referencing `Memact/{repo}#{pr_num}` in the title or description) for your contribution to be tracked and counted. Thank you!"
                             post_github_comment(repo, pr_num, body_msg)
                             print(f"    [COMMENT] Posted dummy PR warning comment on PR #{pr_num}.")
+
+        # --- 4. Auto-Close Resolved Issues ---
+        print(f"  Checking for open issues in Memact/{repo} resolved by merged PRs...")
+        for issue_num, issue_labels in issues_dict.items():
+            ref_pattern = re.compile(rf'\b(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)?\s*(Memact/{repo})?#{issue_num}\b', re.IGNORECASE)
+            linked_pr = None
+            for pr in merged_prs + context_merged_prs:
+                body_str = pr.get("body", "") or ""
+                title_str = pr.get("title", "") or ""
+                if ref_pattern.search(body_str) or ref_pattern.search(title_str):
+                    linked_pr = pr
+                    break
+                    
+            if linked_pr:
+                pr_num = linked_pr["number"]
+                print(f"    Issue Memact/{repo}#{issue_num} was resolved by merged PR #{pr_num}. Auto-closing...")
+                cmd_close = f'gh issue close {issue_num} -R Memact/{repo} -c "Closed automatically because the corresponding PR (PR #{pr_num}) has been merged."'
+                res_close = subprocess.run(cmd_close, shell=True, capture_output=True, text=True, encoding='utf-8')
+                if res_close.returncode == 0:
+                    print(f"    [SUCCESS] Closed issue #{issue_num}.")
+                else:
+                    print(f"    [FAILED] Could not close issue: {res_close.stderr.strip()}")
                             
     except Exception as e:
         print(f"Error checking Memact/{repo}: {e}")
