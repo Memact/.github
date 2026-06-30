@@ -181,18 +181,38 @@ for repo in repos:
             if not assignees:
                 res_comment_data = issue.get("comments", [])
 
+                negative_keywords = [
+                    "un-assign", "unassign", "remove me", "wrong issue",
+                    "not familiar", "picked the wrong", "can you un",
+                    "please un", "don't assign", "do not assign",
+                    "not interested", "withdraw", "stepping down",
+                    "stepping away", "no longer"
+                ]
+
+                # Pre-scan comments to find users requesting unassignment or withdrawal
+                unassign_users = set()
+                if res_comment_data:
+                    for c in res_comment_data:
+                        author = c.get("author", {}).get("login", "")
+                        if not author or author.lower() in ["keepsloading", "github-actions", "memact"]:
+                            continue
+                        body_c = c.get("body", "").lower()
+                        if any(nk in body_c for nk in negative_keywords):
+                            unassign_users.add(author.lower())
+
                 # Rule 1: If created by a community contributor, creator request is at issue creation time
                 if creator and creator.lower() not in ["keepsloading", "github-actions", "memact"]:
-                    requests_to_process.append({
-                        "timestamp": issue.get("createdAt", ""),
-                        "repo": repo,
-                        "num": num,
-                        "user": creator,
-                        "is_creator": True,
-                        "comment_body": "Issue creation",
-                        "comments_list": res_comment_data
-                    })
-                    print(f"  -> Collected creator request from @{creator} (timestamp: {issue.get('createdAt', '')})")
+                    if creator.lower() not in unassign_users:
+                        requests_to_process.append({
+                            "timestamp": issue.get("createdAt", ""),
+                            "repo": repo,
+                            "num": num,
+                            "user": creator,
+                            "is_creator": True,
+                            "comment_body": "Issue creation",
+                            "comments_list": res_comment_data
+                        })
+                        print(f"  -> Collected creator request from @{creator} (timestamp: {issue.get('createdAt', '')})")
                 else:
                     # Rule 2: If created by keepsloading, check comments chronologically for requests
                     if res_comment_data:
@@ -202,18 +222,10 @@ for repo in repos:
                             if not author or author.lower() in ["keepsloading", "github-actions", "memact"]:
                                 continue
                                 
-                            body_comment_lower = body_comment.lower()
-
-                            # Skip comments that express intent to withdraw or unassign
-                            negative_keywords = [
-                                "un-assign", "unassign", "remove me", "wrong issue",
-                                "not familiar", "picked the wrong", "can you un",
-                                "please un", "don't assign", "do not assign",
-                                "not interested", "withdraw", "stepping down",
-                                "stepping away", "no longer"
-                            ]
-                            if any(nk in body_comment_lower for nk in negative_keywords):
+                            if author.lower() in unassign_users:
                                 continue
+                                
+                            body_comment_lower = body_comment.lower()
 
                             # Only match comments that clearly express intent to work on the issue
                             def is_request(body):
