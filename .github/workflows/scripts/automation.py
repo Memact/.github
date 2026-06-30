@@ -59,6 +59,7 @@ AI_RETRY_BASE_SECONDS = float(os.environ.get("AI_RETRY_BASE_SECONDS", "2"))
 AI_RETRY_MAX_SECONDS = float(os.environ.get("AI_RETRY_MAX_SECONDS", "20"))
 AI_RETRY_JITTER_SECONDS = float(os.environ.get("AI_RETRY_JITTER_SECONDS", "1.5"))
 AI_REQUEST_COOLDOWN_SECONDS = float(os.environ.get("AI_REQUEST_COOLDOWN_SECONDS", "10"))
+AUTOCLOSE_ENABLED = os.environ.get("AUTOCLOSE_ENABLED", "false").lower() == "true"
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 
 EXCLUDED_REPOSITORIES = {"Website", "oldWebsite"}
@@ -1817,6 +1818,9 @@ def issue_resolved_by_pr(repo: str, issue_number: int) -> dict[str, Any] | None:
 
 def autoclose_engine() -> None:
     closed = 0
+    if not AUTOCLOSE_ENABLED:
+        CACHE["stats"]["issues_closed"] = closed
+        return
     for repo, issues in CACHE["issues"].items():
         for issue in issues:
             merged = issue_resolved_by_pr(repo, issue["number"])

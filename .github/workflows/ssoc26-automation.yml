@@ -53,6 +53,7 @@ env:
   AI_RETRY_MAX_SECONDS: "20"
   AI_RETRY_JITTER_SECONDS: "1.5"
   AI_REQUEST_COOLDOWN_SECONDS: "10"
+  AUTOCLOSE_ENABLED: "false"
 
 jobs:
   automation:
