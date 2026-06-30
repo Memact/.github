@@ -267,7 +267,7 @@ requests_to_process.sort(key=lambda x: x["timestamp"])
 
 assigned_issues = set()
 first_requester_processed = set()
-skeptical_list = ["prasiddhi-105", "codesparks45", "prassidhi", "prasiddhi", "codesparks"]
+skeptical_list = ["codesparks45", "codesparks"]
 
 for req in requests_to_process:
     repo = req["repo"]
