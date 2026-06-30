@@ -28,6 +28,12 @@ except ImportError:
     genai = None
     genai_types = None
 
+try:
+    from pydantic import BaseModel, Field
+except ImportError:
+    BaseModel = None
+    Field = None
+
 
 ORG_NAME = os.environ.get("ORG_NAME", "Memact")
 REPO_LIMIT = int(os.environ.get("REPO_LIMIT", "1000"))
@@ -168,6 +174,24 @@ class AIReviewResponse(TypedDict):
     testing: list[str]
     documentation: list[str]
     suggestions: list[str]
+
+
+if BaseModel is not None:
+    class AIReviewModel(BaseModel):
+        summary: str = ""
+        confidence: int = Field(ge=0, le=100)
+        recommendation: str
+        blocking: list[str] = Field(default_factory=list)
+        architecture: list[str] = Field(default_factory=list)
+        security: list[str] = Field(default_factory=list)
+        performance: list[str] = Field(default_factory=list)
+        maintainability: list[str] = Field(default_factory=list)
+        style: list[str] = Field(default_factory=list)
+        testing: list[str] = Field(default_factory=list)
+        documentation: list[str] = Field(default_factory=list)
+        suggestions: list[str] = Field(default_factory=list)
+else:
+    AIReviewModel = None
 
 MEMACT_AI_REVIEW_CONTEXT = """
 You are reviewing Memact pull requests.
@@ -1360,15 +1384,19 @@ class GeminiProvider(AIProvider):
             return None
         for attempt in range(AI_RETRY_COUNT + 1):
             try:
+                schema = AIReviewModel or AI_REVIEW_SCHEMA
                 response = self.client.models.generate_content(
                     model=self.model,
                     contents=prompt,
                     config=genai_types.GenerateContentConfig(
                         temperature=0.2,
                         response_mime_type="application/json",
-                        response_schema=AIReviewResponse,
+                        response_schema=schema,
                     ),
                 )
+                parsed = getattr(response, "parsed", None)
+                if parsed is not None and hasattr(parsed, "model_dump"):
+                    return parse_ai_review_data(parsed.model_dump())
                 return parse_ai_review_response(response.text or "")
             except Exception as exc:
                 message = str(exc).lower()
@@ -1376,7 +1404,7 @@ class GeminiProvider(AIProvider):
                     info("AI review skipped because provider quota or rate limit is unavailable.")
                     return None
                 if attempt >= AI_RETRY_COUNT:
-                    info("AI review skipped because provider is unavailable.")
+                    info(f"AI review skipped because provider is unavailable ({exc.__class__.__name__}).")
                     return None
                 time.sleep(AI_RETRY_BASE_SECONDS * (2 ** attempt))
         return None
@@ -1400,6 +1428,13 @@ def parse_ai_review_response(text: str) -> dict[str, Any] | None:
         data = json.loads(cleaned)
     except json.JSONDecodeError:
         warning("AI review returned malformed JSON; skipping AI comment.")
+        return None
+    return parse_ai_review_data(data)
+
+
+def parse_ai_review_data(data: dict[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(data, dict):
+        warning("AI review returned non-object JSON; skipping AI comment.")
         return None
 
     recommendation = data.get("recommendation")
