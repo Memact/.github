@@ -54,7 +54,7 @@ AI_MERGE_METHOD = os.environ.get("AI_MERGE_METHOD", "squash").strip().lower()
 AI_REVIEW_DRAFT_PRS = os.environ.get("AI_REVIEW_DRAFT_PRS", "false").lower() == "true"
 AI_REVIEW_ON_SCHEDULE = os.environ.get("AI_REVIEW_ON_SCHEDULE", "false").lower() == "true"
 AI_MAX_DIFF_CHARS = int(os.environ.get("AI_MAX_DIFF_CHARS", "20000"))
-AI_RETRY_COUNT = int(os.environ.get("AI_RETRY_COUNT", "4"))
+AI_RETRY_COUNT = int(os.environ.get("AI_RETRY_COUNT", "2"))
 AI_RETRY_BASE_SECONDS = float(os.environ.get("AI_RETRY_BASE_SECONDS", "2"))
 AI_RETRY_MAX_SECONDS = float(os.environ.get("AI_RETRY_MAX_SECONDS", "20"))
 AI_RETRY_JITTER_SECONDS = float(os.environ.get("AI_RETRY_JITTER_SECONDS", "1.5"))
@@ -337,7 +337,7 @@ def is_transient_ai_error(exc: Exception) -> bool:
     message = str(exc).lower()
     status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
     return (
-        status in {429, 500, 502, 503, 504}
+        status in {500, 502, 503, 504}
         or any(
             token in message
             for token in (
@@ -350,10 +350,25 @@ def is_transient_ai_error(exc: Exception) -> bool:
                 "unavailable",
                 "deadline",
                 "timeout",
-                "quota",
-                "rate",
+            )
+        )
+    )
+
+
+def is_ai_quota_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    return (
+        status == 429
+        or any(
+            token in message
+            for token in (
                 "429",
+                "quota",
+                "rate limit",
                 "resource_exhausted",
+                "daily limit",
+                "rpd",
             )
         )
     )
@@ -1452,7 +1467,19 @@ class GeminiProvider(AIProvider):
                         if parsed_review:
                             return parsed_review
                     except Exception as exc:
+                        if is_ai_quota_error(exc):
+                            info(
+                                "AI review skipped because provider quota or rate limit was reached "
+                                f"(model={model}, schema={use_schema}, error={exc.__class__.__name__})."
+                            )
+                            return None
                         transient = is_transient_ai_error(exc)
+                        if not transient:
+                            info(
+                                "AI review provider attempt failed without retry "
+                                f"(model={model}, schema={use_schema}, error={exc.__class__.__name__})."
+                            )
+                            break
                         if attempt >= AI_RETRY_COUNT:
                             info(
                                 "AI review provider attempt failed "
@@ -1461,12 +1488,11 @@ class GeminiProvider(AIProvider):
                             )
                             break
                         delay = retry_delay(attempt)
-                        if transient:
-                            info(
-                                "AI provider transient failure; retrying "
-                                f"(model={model}, schema={use_schema}, attempt={attempt + 1}, "
-                                f"delay={round(delay, 1)}s)."
-                            )
+                        info(
+                            "AI provider transient failure; retrying "
+                            f"(model={model}, schema={use_schema}, attempt={attempt + 1}, "
+                            f"delay={round(delay, 1)}s)."
+                        )
                         time.sleep(delay)
         info("AI review skipped because all provider fallback attempts failed.")
         return None
