@@ -9,6 +9,7 @@ auto-closing resolved issues.
 from __future__ import annotations
 
 import datetime as dt
+import base64
 import json
 import os
 import re
@@ -18,13 +19,32 @@ import tempfile
 import time
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, TypedDict
+
+try:
+    from google import genai
+    from google.genai import types as genai_types
+except ImportError:
+    genai = None
+    genai_types = None
 
 
 ORG_NAME = os.environ.get("ORG_NAME", "Memact")
 REPO_LIMIT = int(os.environ.get("REPO_LIMIT", "1000"))
 ISSUE_LIMIT = int(os.environ.get("ISSUE_LIMIT", "1000"))
 PR_LIMIT = int(os.environ.get("PR_LIMIT", "1000"))
+AI_ENABLED = os.environ.get("AI_ENABLED", "true").lower() == "true"
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
+AI_MODEL = os.environ.get("AI_MODEL", "gemini-2.5-flash-lite").strip()
+AI_MIN_CONFIDENCE = int(os.environ.get("AI_MIN_CONFIDENCE", "90"))
+AI_AUTO_MERGE = os.environ.get("AI_AUTO_MERGE", "false").lower() == "true"
+AI_MERGE_METHOD = os.environ.get("AI_MERGE_METHOD", "squash").strip().lower()
+AI_REVIEW_DRAFT_PRS = os.environ.get("AI_REVIEW_DRAFT_PRS", "false").lower() == "true"
+AI_REVIEW_ON_SCHEDULE = os.environ.get("AI_REVIEW_ON_SCHEDULE", "false").lower() == "true"
+AI_MAX_DIFF_CHARS = int(os.environ.get("AI_MAX_DIFF_CHARS", "12000"))
+AI_RETRY_COUNT = int(os.environ.get("AI_RETRY_COUNT", "2"))
+AI_RETRY_BASE_SECONDS = float(os.environ.get("AI_RETRY_BASE_SECONDS", "2"))
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 
 EXCLUDED_REPOSITORIES = {"Website", "oldWebsite"}
 CONTEXT_REPO = "Context"
@@ -95,7 +115,108 @@ MARKERS = {
     "dummy_success": "<!-- ssoc26-dummy-pr-success -->",
     "dummy_warning": "<!-- ssoc26-dummy-pr-warning -->",
     "quality": "<!-- ssoc26-quality-warning -->",
+    "ai_review": "<!-- ssoc26-ai-review -->",
+    "ai_merge": "<!-- ssoc26-ai-merge-advice -->",
 }
+
+AI_REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "confidence": {"type": "integer"},
+        "recommendation": {
+            "type": "string",
+            "enum": ["PASS", "PASS_WITH_COMMENTS", "NEEDS_CHANGES"],
+        },
+        "blocking": {"type": "array", "items": {"type": "string"}},
+        "architecture": {"type": "array", "items": {"type": "string"}},
+        "security": {"type": "array", "items": {"type": "string"}},
+        "performance": {"type": "array", "items": {"type": "string"}},
+        "maintainability": {"type": "array", "items": {"type": "string"}},
+        "style": {"type": "array", "items": {"type": "string"}},
+        "testing": {"type": "array", "items": {"type": "string"}},
+        "documentation": {"type": "array", "items": {"type": "string"}},
+        "suggestions": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [
+        "summary",
+        "confidence",
+        "recommendation",
+        "blocking",
+        "architecture",
+        "security",
+        "performance",
+        "maintainability",
+        "style",
+        "testing",
+        "documentation",
+        "suggestions",
+    ],
+}
+
+
+class AIReviewResponse(TypedDict):
+    summary: str
+    confidence: int
+    recommendation: str
+    blocking: list[str]
+    architecture: list[str]
+    security: list[str]
+    performance: list[str]
+    maintainability: list[str]
+    style: list[str]
+    testing: list[str]
+    documentation: list[str]
+    suggestions: list[str]
+
+MEMACT_AI_REVIEW_CONTEXT = """
+You are reviewing Memact pull requests.
+
+Memact is an open protocol and reference implementation for portable,
+user-owned context. Its doctrine is: activity is not identity, identity belongs
+to users, apps contribute observations, users approve identity, context is
+portable and permissioned, identity evolves, and freshness, confidence,
+relevance, provenance, explainability, and simplicity matter.
+
+Core evidence flow: Raw Activity -> Evidence -> Claim -> Approval ->
+Approved Claim -> Memory -> Retrieval. Apps may contribute observations and
+request approved context, but apps must never create identity. Users approve,
+rectify, archive, and delete identity claims.
+
+Repository boundaries:
+- Access owns permissions, consent, authentication, authorization, revocation,
+  sharing scopes, transparency, and auditability. Access must not own memory,
+  claim semantics, or business identity.
+- Context owns categorization, ranking, relevance, freshness, confidence,
+  contradiction resolution, reinforcement, provenance, explainability, and
+  retrieval preparation. Context must not bypass consent or persist canonical
+  user history.
+- Memory owns persistence capabilities, journals, replay, indexing, history,
+  and retrieval support. It must stay implementation-independent at the
+  protocol level.
+- Contracts owns shared schemas, validators, and protocol contracts. Contracts
+  must contain zero business logic.
+- SDK is the reference implementation and developer experience layer for CAP,
+  CCP, CRP wrappers, auth helpers, and diagnostics. It must not own product
+  policy or protocol semantics.
+- Notebook is the presentation-first user experience for approvals,
+  rectification, search, timelines, trust/freshness visualization, undo,
+  history, connected apps, and profile management.
+
+Protocols:
+- CAP is for applications requesting approved context with consent and least
+  context.
+- CCP is for applications contributing observations/evidence.
+- CRP is for retrieval of approved, permissioned context.
+Prefer extending CAP, CCP, or CRP over inventing new protocols.
+
+Review priorities: protect user ownership, consent, least-context access,
+repository boundaries, protocol compatibility, simple architecture, stable
+public APIs, maintainability, tests, and clear documentation. Block changes
+that let apps create identity, bypass approval, mix repository responsibilities,
+add speculative infrastructure, leak secrets, weaken authorization, or make
+protocol contracts unstable.
+""".strip()
 
 SKIP_DIFF_PREFIXES = ("docs/", "examples/", "test/", "tests/", ".github/")
 SKIP_DIFF_FILES = {
@@ -410,7 +531,7 @@ def fetch_all_pull_requests() -> None:
                 "--limit",
                 str(PR_LIMIT),
                 "--json",
-                "number,title,body,state,author,labels,url",
+                "number,title,body,state,author,labels,url,headRefOid,isDraft,files,reviewDecision,mergeStateStatus,mergeable,statusCheckRollup",
             ]
         )
         if prs is None:
@@ -990,6 +1111,430 @@ def update_or_post_pr_comment(repo: str, pr_number: int, marker: str, body: str)
     return post_comment_once("pr", repo, pr_number, marker, body)
 
 
+def pr_head_sha(pr: dict[str, Any]) -> str:
+    return (pr.get("headRefOid") or "").strip()
+
+
+def pr_file_paths(pr: dict[str, Any]) -> list[str]:
+    paths = []
+    for item in pr.get("files") or []:
+        path = item.get("path") or item.get("filename") or ""
+        if path:
+            paths.append(path)
+    return paths
+
+
+def is_low_value_ai_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lower()
+    filename = normalized.rsplit("/", 1)[-1]
+    if filename in {"license", "license.md", "readme.md"}:
+        return True
+    if normalized.startswith(("docs/", ".github/")):
+        return True
+    if normalized.endswith((".md", ".markdown", ".mdx", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".pdf")):
+        return True
+    return False
+
+
+def should_review_files_with_ai(paths: list[str]) -> bool:
+    if not paths:
+        return True
+    return any(not is_low_value_ai_path(path) for path in paths)
+
+
+def should_run_ai_review_for_event() -> bool:
+    if not AI_ENABLED:
+        return False
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+    if event_name == "schedule":
+        return AI_REVIEW_ON_SCHEDULE
+    if event_name != "pull_request":
+        return False
+    event = load_event() or {}
+    return event.get("action") in {"opened", "synchronize", "ready_for_review"}
+
+
+def ai_review_exists_for_sha(comments: list[dict[str, Any]], sha: str) -> bool:
+    if not sha:
+        return False
+    marker = MARKERS["ai_review"]
+    sha_line = f"Reviewed commit: `{sha}`"
+    for comment in comments:
+        username = comment.get("author", {}).get("login", "").lower()
+        body = comment.get("body") or ""
+        if is_bot(username) and marker in body and sha_line in body:
+            return True
+    return False
+
+
+def fetch_text_file(repo: str, path: str, *, max_chars: int = 4000) -> str:
+    result = gh(
+        [
+            "api",
+            f"repos/{ORG_NAME}/{repo}/contents/{path}",
+            "-H",
+            "Accept: application/vnd.github+json",
+        ],
+        log_failure=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return ""
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return ""
+    if not data or data.get("type") != "file" or not data.get("content"):
+        return ""
+    try:
+        decoded = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+    except (ValueError, TypeError):
+        return ""
+    return decoded[:max_chars]
+
+
+def linked_issue_context(repo: str, pr: dict[str, Any]) -> str:
+    text = f"{pr.get('title', '')}\n{pr.get('body') or ''}"
+    blocks = []
+    for issue_number in sorted(referenced_issues(repo, text))[:3]:
+        data = gh_json(
+            [
+                "issue",
+                "view",
+                str(issue_number),
+                "-R",
+                f"{ORG_NAME}/{repo}",
+                "--json",
+                "title,body,labels",
+            ]
+        )
+        if not data:
+            continue
+        blocks.append(
+            f"Issue #{issue_number}: {data.get('title', '')}\n"
+            f"Labels: {', '.join(sorted(label.get('name', '') for label in data.get('labels', [])))}\n"
+            f"{(data.get('body') or '')[:3000]}"
+        )
+    return "\n\n".join(blocks)
+
+
+def repository_context(repo: str) -> str:
+    sections = [
+        ("README.md", fetch_text_file(repo, "README.md")),
+        ("MEMACT.md", fetch_text_file(repo, "MEMACT.md")),
+        ("CONTRIBUTING.md", fetch_text_file(repo, "CONTRIBUTING.md")),
+    ]
+    return "\n\n".join(
+        f"## {name}\n{content}"
+        for name, content in sections
+        if content.strip()
+    )
+
+
+def sanitize_prompt_text(text: str) -> str:
+    secret_words = ("token", "secret", "password", "api_key", "apikey", "authorization")
+    lines = []
+    for line in (text or "").splitlines():
+        lowered = line.lower()
+        if any(word in lowered for word in secret_words) and ("=" in line or ":" in line):
+            lines.append("[redacted potential secret line]")
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+class AIProvider:
+    def review(self, prompt: str) -> dict[str, Any] | None:
+        raise NotImplementedError
+
+
+class GeminiProvider(AIProvider):
+    def __init__(self, api_key: str, model: str) -> None:
+        self.api_key = api_key
+        self.model = model
+        self.client = None
+
+    def available(self) -> bool:
+        if not self.api_key:
+            return False
+        if genai is None or genai_types is None:
+            warning("google-genai is not installed; skipping AI review.")
+            return False
+        if self.client is None:
+            self.client = genai.Client(api_key=self.api_key)
+        return True
+
+    def review(self, prompt: str) -> dict[str, Any] | None:
+        if not self.available():
+            return None
+        for attempt in range(AI_RETRY_COUNT + 1):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config=genai_types.GenerateContentConfig(
+                        temperature=0.2,
+                        response_mime_type="application/json",
+                        response_schema=AIReviewResponse,
+                    ),
+                )
+                return parse_ai_review_response(response.text or "")
+            except Exception as exc:
+                message = str(exc).lower()
+                if any(token in message for token in ("quota", "rate", "429", "resource_exhausted")):
+                    warning("Gemini quota or rate limit reached; skipping AI review without commenting.")
+                    return None
+                if attempt >= AI_RETRY_COUNT:
+                    warning("Gemini review unavailable; skipping AI review without commenting.")
+                    return None
+                time.sleep(AI_RETRY_BASE_SECONDS * (2 ** attempt))
+        return None
+
+
+def get_ai_provider() -> AIProvider | None:
+    if not AI_ENABLED:
+        return None
+    if AI_PROVIDER != "gemini":
+        warning(f"Unsupported AI provider '{AI_PROVIDER}'; skipping AI review.")
+        return None
+    return GeminiProvider(GEMINI_API_KEY, AI_MODEL)
+
+
+def parse_ai_review_response(text: str) -> dict[str, Any] | None:
+    cleaned = (text or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        warning("AI review returned malformed JSON; skipping AI comment.")
+        return None
+
+    recommendation = data.get("recommendation")
+    confidence = data.get("confidence")
+    if recommendation not in {"PASS", "PASS_WITH_COMMENTS", "NEEDS_CHANGES"}:
+        warning("AI review returned invalid recommendation; skipping AI comment.")
+        return None
+    if not isinstance(confidence, int) or confidence < 0 or confidence > 100:
+        warning("AI review returned invalid confidence; skipping AI comment.")
+        return None
+    for key in (
+        "blocking",
+        "architecture",
+        "security",
+        "performance",
+        "maintainability",
+        "style",
+        "testing",
+        "documentation",
+        "suggestions",
+    ):
+        if not isinstance(data.get(key), list):
+            data[key] = []
+    data["summary"] = str(data.get("summary", "")).strip()
+    return data
+
+
+def ai_review_prompt(repo: str, pr: dict[str, Any], diff: str) -> str:
+    labels = ", ".join(sorted(label_names(pr))) or "none"
+    changed_files = "\n".join(f"- {path}" for path in pr_file_paths(pr)) or "unknown"
+    truncated_diff = sanitize_prompt_text(diff[:AI_MAX_DIFF_CHARS])
+    truncation_note = "Diff truncated for token/cost control." if len(diff) > AI_MAX_DIFF_CHARS else ""
+
+    return f"""
+{MEMACT_AI_REVIEW_CONTEXT}
+
+Return only JSON matching this schema:
+{json.dumps(AI_REVIEW_SCHEMA, indent=2)}
+
+Review this PR as a Memact engineering assistant. Do not provide generic advice
+unless it is tied to the PR. Check whether the PR solves linked issues and
+whether code belongs in this repository.
+
+Repository: Memact/{repo}
+PR: #{pr.get("number")}
+Title: {pr.get("title", "")}
+Author: {pr.get("author", {}).get("login", "")}
+Labels: {labels}
+Head commit: {pr_head_sha(pr)}
+
+PR description:
+{sanitize_prompt_text(pr.get("body") or "")}
+
+Linked issue context:
+{sanitize_prompt_text(linked_issue_context(repo, pr))}
+
+Changed files:
+{changed_files}
+
+Repository-specific context:
+{sanitize_prompt_text(repository_context(repo))}
+
+Unified diff:
+```diff
+{truncated_diff}
+```
+
+{truncation_note}
+""".strip()
+
+
+def format_ai_review_comment(review: dict[str, Any], sha: str) -> str:
+    def section(title: str, values: list[str]) -> list[str]:
+        if not values:
+            return []
+        return [f"## {title}", *[f"- {item}" for item in values], ""]
+
+    lines = [
+        "# AI Review",
+        "",
+        f"Reviewed commit: `{sha}`",
+        "",
+        "## Summary",
+        review.get("summary") or "No summary returned.",
+        "",
+        f"## Confidence",
+        f"{review.get('confidence')}%",
+        "",
+    ]
+    lines.extend(section("Blocking", review["blocking"]))
+    lines.extend(section("Architecture", review["architecture"]))
+    lines.extend(section("Security", review["security"]))
+    lines.extend(section("Performance", review["performance"]))
+    lines.extend(section("Maintainability", review["maintainability"]))
+    lines.extend(section("Style", review["style"]))
+    lines.extend(section("Testing", review["testing"]))
+    lines.extend(section("Documentation", review["documentation"]))
+    lines.extend(section("Suggestions", review["suggestions"]))
+    lines.extend(
+        [
+            "## Recommendation",
+            review["recommendation"],
+            "",
+            "_AI review is advisory. Maintainers and GitHub protections remain authoritative._",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def ai_review_engine() -> None:
+    CACHE.setdefault("ai_reviews", {})
+    CACHE["stats"]["ai_reviewed"] = 0
+    CACHE["stats"]["ai_skipped"] = 0
+    if not should_run_ai_review_for_event():
+        return
+
+    provider = get_ai_provider()
+    if provider is None:
+        return
+
+    for repo, prs in CACHE["prs"].items():
+        if repo not in CACHE["repositories"]:
+            continue
+        for pr in prs:
+            if pr.get("state", "").lower() != "open":
+                continue
+            if pr.get("isDraft") and not AI_REVIEW_DRAFT_PRS:
+                CACHE["stats"]["ai_skipped"] += 1
+                continue
+            paths = pr_file_paths(pr)
+            if not should_review_files_with_ai(paths):
+                CACHE["stats"]["ai_skipped"] += 1
+                continue
+            sha = pr_head_sha(pr)
+            if not sha:
+                CACHE["stats"]["ai_skipped"] += 1
+                continue
+            pr_number = pr["number"]
+            comments = fetch_pr_comments(repo, pr_number, refresh=True)
+            if ai_review_exists_for_sha(comments, sha):
+                CACHE["stats"]["ai_skipped"] += 1
+                continue
+            diff = fetch_pr_diff(repo, pr_number)
+            if not diff.strip():
+                CACHE["stats"]["ai_skipped"] += 1
+                continue
+            review = provider.review(ai_review_prompt(repo, pr, diff))
+            if review is None:
+                CACHE["stats"]["ai_skipped"] += 1
+                continue
+            CACHE["ai_reviews"][(repo, pr_number, sha)] = review
+            if post_comment_once("pr", repo, pr_number, MARKERS["ai_review"], format_ai_review_comment(review, sha)):
+                CACHE["stats"]["ai_reviewed"] += 1
+
+
+def ci_successful(pr: dict[str, Any]) -> bool:
+    rollup = pr.get("statusCheckRollup")
+    if not rollup:
+        return False
+    contexts = rollup if isinstance(rollup, list) else rollup.get("contexts", [])
+    if not contexts:
+        return False
+    for context in contexts:
+        state = str(context.get("state") or context.get("conclusion") or "").upper()
+        if state not in {"SUCCESS", "SUCCESSFUL", "COMPLETED", "NEUTRAL", "SKIPPED"}:
+            return False
+    return True
+
+
+def merge_requirements_met(pr: dict[str, Any], review: dict[str, Any] | None) -> tuple[bool, list[str]]:
+    reasons = []
+    if review is None:
+        reasons.append("No AI review result for current commit.")
+    else:
+        if review.get("recommendation") != "PASS":
+            reasons.append("AI recommendation is not PASS.")
+        if int(review.get("confidence", 0)) < AI_MIN_CONFIDENCE:
+            reasons.append("AI confidence is below threshold.")
+        if review.get("blocking"):
+            reasons.append("AI reported blocking issues.")
+    if not ci_successful(pr):
+        reasons.append("CI checks are not successful.")
+    if pr.get("reviewDecision") not in {"APPROVED", ""}:
+        reasons.append("Required review decision is not approved.")
+    if str(pr.get("mergeable", "")).upper() not in {"MERGEABLE", "UNKNOWN"}:
+        reasons.append("PR is not mergeable.")
+    if str(pr.get("mergeStateStatus", "")).upper() not in {"CLEAN", "HAS_HOOKS", "UNKNOWN"}:
+        reasons.append("Branch protection or repository rules are not satisfied.")
+    return not reasons, reasons
+
+
+def merge_pr(repo: str, pr_number: int) -> bool:
+    method_flag = {
+        "squash": "--squash",
+        "merge": "--merge",
+        "rebase": "--rebase",
+    }.get(AI_MERGE_METHOD, "--squash")
+    result = gh(["pr", "merge", str(pr_number), "-R", f"{ORG_NAME}/{repo}", method_flag, "--auto"], log_failure=False)
+    if result.returncode != 0:
+        warning("Automatic merge could not be enabled; GitHub protections remain authoritative.")
+        return False
+    return True
+
+
+def ai_merge_engine() -> None:
+    CACHE["stats"]["ai_merge_ready"] = 0
+    CACHE["stats"]["ai_merge_blocked"] = 0
+    CACHE["stats"]["ai_auto_merge_enabled"] = 0
+    if not AI_ENABLED:
+        return
+    for repo, prs in CACHE["prs"].items():
+        if repo not in CACHE["repositories"]:
+            continue
+        for pr in prs:
+            if pr.get("state", "").lower() != "open":
+                continue
+            sha = pr_head_sha(pr)
+            review = CACHE.get("ai_reviews", {}).get((repo, pr["number"], sha))
+            ready, reasons = merge_requirements_met(pr, review)
+            if ready:
+                CACHE["stats"]["ai_merge_ready"] += 1
+                if AI_AUTO_MERGE and merge_pr(repo, pr["number"]):
+                    CACHE["stats"]["ai_auto_merge_enabled"] += 1
+            else:
+                CACHE["stats"]["ai_merge_blocked"] += 1
+
+
 def code_quality_engine() -> None:
     flagged = 0
     cleaned = 0
@@ -1064,6 +1609,11 @@ def print_summary() -> None:
         "dummy_warned",
         "quality_flagged",
         "quality_cleaned",
+        "ai_reviewed",
+        "ai_skipped",
+        "ai_merge_ready",
+        "ai_merge_blocked",
+        "ai_auto_merge_enabled",
         "issues_closed",
     ]:
         print(f"{key:24}: {CACHE['stats'].get(key, 0)}")
@@ -1090,6 +1640,8 @@ def main() -> None:
     pr_label_engine()
     dummy_pr_engine()
     code_quality_engine()
+    ai_review_engine()
+    ai_merge_engine()
     autoclose_engine()
 
     print_summary()
