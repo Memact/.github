@@ -1518,6 +1518,8 @@ def ai_merge_engine() -> None:
     CACHE["stats"]["ai_auto_merge_enabled"] = 0
     if not AI_ENABLED:
         return
+    if not AI_AUTO_MERGE and not CACHE.get("ai_reviews"):
+        return
     for repo, prs in CACHE["prs"].items():
         if repo not in CACHE["repositories"]:
             continue
