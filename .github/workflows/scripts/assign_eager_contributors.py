@@ -267,7 +267,7 @@ requests_to_process.sort(key=lambda x: x["timestamp"])
 
 assigned_issues = set()
 first_requester_processed = set()
-skeptical_list = ["codesparks45", "codesparks"]
+skeptical_list = []
 
 for req in requests_to_process:
     repo = req["repo"]
@@ -341,6 +341,11 @@ for req in requests_to_process:
                 body_msg = f"Hey @{user} 👋 Since you created this issue, you've been auto-assigned to it as part of SSoC26! Looking forward to your PR. Feel free to ask questions if you get stuck. Good luck!"
             else:
                 body_msg = f"Hey @{user} 👋 You've been assigned this issue as part of SSoC26! Looking forward to your PR. Feel free to ask questions if you get stuck. Good luck!"
+                
+            former_skeptical_list = ["codesparks45", "codesparks", "prasiddhi-105", "prasiddhi", "prassidhi"]
+            if user.lower() in former_skeptical_list:
+                body_msg += "\n\n⚠️ **Important Contributor Notice:** Please ensure your implementation strictly follows project coding standards. Make sure to write clean code, include proper test coverage, and avoid leaving console logs, placeholder TODOs, or credentials in your pull request. Based on previous observations, we are keeping a close eye on code quality for new contributions. If a PR contains subpar code or requires multiple rounds of basic polish, we may restrict future assignments (greylisting). Thank you for your cooperation!"
+                
             cmd_msg = f'gh issue comment {num} -R Memact/{repo} -b "{body_msg}"'
             subprocess.run(cmd_msg, shell=True, capture_output=True, text=True, encoding='utf-8')
         else:
