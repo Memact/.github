@@ -258,6 +258,7 @@ CACHE: dict[str, Any] = {
     "issue_comments": {},
     "pr_comments": {},
     "timelines": {},
+    "mutation_keys": set(),
     "assignment_count": defaultdict(int),
     "latest_intent": defaultdict(dict),
     "current_user": "",
@@ -283,6 +284,14 @@ def error(message: str) -> None:
 
 def action(message: str) -> None:
     print(f"[ACTION] {message}")
+
+
+def claim_mutation(key: str) -> bool:
+    if key in CACHE["mutation_keys"]:
+        CACHE["stats"]["mutations_suppressed_in_run"] += 1
+        return False
+    CACHE["mutation_keys"].add(key)
+    return True
 
 
 def gh(args: list[str], *, log_failure: bool = True) -> subprocess.CompletedProcess[str]:
@@ -587,12 +596,16 @@ def bot_comment_exists(comments: list[dict[str, Any]], marker: str) -> bool:
 
 
 def post_comment_once(kind: str, repo: str, number: int, marker: str, body: str) -> bool:
+    mutation_key = f"comment:{kind}:{repo}:{number}:{marker}"
+    if not claim_mutation(mutation_key):
+        return False
     comments = (
         fetch_issue_comments(repo, number, refresh=True)
         if kind == "issue"
         else fetch_pr_comments(repo, number, refresh=True)
     )
     if bot_comment_exists(comments, marker):
+        CACHE["stats"]["comments_suppressed_existing"] += 1
         return False
 
     full_body = f"{marker}\n{body}"
@@ -620,16 +633,48 @@ def ensure_label(repo: str, label: str) -> bool:
     return True
 
 
+def fetch_current_labels(kind: str, repo: str, number: int) -> set[str]:
+    command = "issue" if kind == "issue" else "pr"
+    result = gh(
+        [command, "view", str(number), "-R", f"{ORG_NAME}/{repo}", "--json", "labels"],
+        log_failure=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return set()
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return set()
+    return {normalize_label(label.get("name", "")) for label in data.get("labels", [])}
+
+
 def edit_labels(kind: str, repo: str, number: int, *, add: list[str] | None = None, remove: list[str] | None = None) -> bool:
     ok = True
     command = "issue" if kind == "issue" else "pr"
+    current_labels = fetch_current_labels(kind, repo, number)
     for label in add or []:
+        normalized = normalize_label(label)
+        if normalized in current_labels:
+            CACHE["stats"]["labels_suppressed_existing"] += 1
+            continue
+        mutation_key = f"label:add:{kind}:{repo}:{number}:{normalized}"
+        if not claim_mutation(mutation_key):
+            continue
         if not ensure_label(repo, label):
             ok = False
             continue
         result = gh([command, "edit", str(number), "-R", f"{ORG_NAME}/{repo}", "--add-label", label])
+        if result.returncode == 0:
+            current_labels.add(normalized)
         ok = ok and result.returncode == 0
     for label in remove or []:
+        normalized = normalize_label(label)
+        if normalized not in current_labels:
+            CACHE["stats"]["labels_suppressed_absent"] += 1
+            continue
+        mutation_key = f"label:remove:{kind}:{repo}:{number}:{normalized}"
+        if not claim_mutation(mutation_key):
+            continue
         result = gh(
             [command, "edit", str(number), "-R", f"{ORG_NAME}/{repo}", "--remove-label", label],
             log_failure=False,
@@ -637,6 +682,8 @@ def edit_labels(kind: str, repo: str, number: int, *, add: list[str] | None = No
         if result.returncode != 0 and "not found" not in result.stderr.lower():
             warning(f"{repo}#{number}: could not remove label {label}: {result.stderr.strip()}")
             ok = False
+        elif result.returncode == 0:
+            current_labels.discard(normalized)
     return ok
 
 
@@ -726,6 +773,8 @@ def fetch_active_assignment_count(username: str) -> int:
 
 
 def assign_user(repo: str, issue_number: int, username: str) -> bool:
+    if not claim_mutation(f"assign:{repo}:{issue_number}:{username.lower()}"):
+        return False
     result = gh(
         [
             "issue",
@@ -808,6 +857,8 @@ def assignment_engine() -> None:
 
 
 def remove_assignee(repo: str, issue_number: int, username: str) -> bool:
+    if not claim_mutation(f"unassign:{repo}:{issue_number}:{username.lower()}"):
+        return False
     result = gh(
         [
             "issue",
@@ -1194,8 +1245,11 @@ def ai_review_exists_for_sha(comments: list[dict[str, Any]], sha: str) -> bool:
 
 
 def post_ai_review_comment(repo: str, pr_number: int, sha: str, body: str) -> bool:
+    if not claim_mutation(f"ai-review:{repo}:{pr_number}:{sha}"):
+        return False
     comments = fetch_pr_comments(repo, pr_number, refresh=True)
     if ai_review_exists_for_sha(comments, sha):
+        CACHE["stats"]["ai_reviews_suppressed_existing_sha"] += 1
         return False
     with temp_markdown(f"{MARKERS['ai_review']}\n{body}") as path:
         result = gh(["pr", "comment", str(pr_number), "-R", f"{ORG_NAME}/{repo}", "-F", path])
@@ -1665,6 +1719,11 @@ def print_summary() -> None:
         "ai_merge_ready",
         "ai_merge_blocked",
         "ai_auto_merge_enabled",
+        "comments_suppressed_existing",
+        "labels_suppressed_existing",
+        "labels_suppressed_absent",
+        "mutations_suppressed_in_run",
+        "ai_reviews_suppressed_existing_sha",
         "issues_closed",
     ]:
         print(f"{key:24}: {CACHE['stats'].get(key, 0)}")
