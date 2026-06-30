@@ -53,7 +53,7 @@ AI_AUTO_MERGE = os.environ.get("AI_AUTO_MERGE", "false").lower() == "true"
 AI_MERGE_METHOD = os.environ.get("AI_MERGE_METHOD", "squash").strip().lower()
 AI_REVIEW_DRAFT_PRS = os.environ.get("AI_REVIEW_DRAFT_PRS", "false").lower() == "true"
 AI_REVIEW_ON_SCHEDULE = os.environ.get("AI_REVIEW_ON_SCHEDULE", "false").lower() == "true"
-AI_MAX_DIFF_CHARS = int(os.environ.get("AI_MAX_DIFF_CHARS", "8000"))
+AI_MAX_DIFF_CHARS = int(os.environ.get("AI_MAX_DIFF_CHARS", "20000"))
 AI_RETRY_COUNT = int(os.environ.get("AI_RETRY_COUNT", "4"))
 AI_RETRY_BASE_SECONDS = float(os.environ.get("AI_RETRY_BASE_SECONDS", "2"))
 AI_RETRY_MAX_SECONDS = float(os.environ.get("AI_RETRY_MAX_SECONDS", "20"))
@@ -1527,8 +1527,17 @@ def parse_ai_review_data(data: dict[str, Any]) -> dict[str, Any] | None:
 def ai_review_prompt(repo: str, pr: dict[str, Any], diff: str) -> str:
     labels = ", ".join(sorted(label_names(pr))) or "none"
     changed_files = "\n".join(f"- {path}" for path in pr_file_paths(pr)) or "unknown"
-    truncated_diff = sanitize_prompt_text(diff[:AI_MAX_DIFF_CHARS])
-    truncation_note = "Diff truncated for token/cost control." if len(diff) > AI_MAX_DIFF_CHARS else ""
+    diff_size = len(diff)
+    diff_for_review = diff[:AI_MAX_DIFF_CHARS]
+    truncated_diff = sanitize_prompt_text(diff_for_review)
+    truncation_note = (
+        f"Diff size: {diff_size} characters. Full diff included."
+        if diff_size <= AI_MAX_DIFF_CHARS
+        else (
+            f"Diff size: {diff_size} characters. Included the first {AI_MAX_DIFF_CHARS} "
+            "characters for quota and reliability control; review may miss omitted changes."
+        )
+    )
 
     return f"""
 {MEMACT_AI_REVIEW_CONTEXT}
@@ -1574,6 +1583,13 @@ def format_ai_review_comment(review: dict[str, Any], sha: str) -> str:
             return []
         return [f"## {title}", *[f"- {item}" for item in values], ""]
 
+    recommendation_labels = {
+        "PASS": "Pass",
+        "PASS_WITH_COMMENTS": "Pass with comments",
+        "NEEDS_CHANGES": "Needs changes",
+    }
+    recommendation = review["recommendation"]
+
     lines = [
         "# AI Review",
         "",
@@ -1598,9 +1614,13 @@ def format_ai_review_comment(review: dict[str, Any], sha: str) -> str:
     lines.extend(
         [
             "## Recommendation",
-            review["recommendation"],
+            f"{recommendation_labels.get(recommendation, recommendation)} (`{recommendation}`)",
             "",
-            "_AI review is advisory. Maintainers and GitHub protections remain authoritative._",
+            (
+                "_AI review is advisory and may be inaccurate. Maintainers and GitHub "
+                "protections remain authoritative. If this review looks wrong, please "
+                "reply here and explain what should be reconsidered._"
+            ),
         ]
     )
     return "\n".join(lines)
