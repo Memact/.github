@@ -21,6 +21,7 @@ import time
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import Any, TypedDict
+from urllib.parse import quote
 
 try:
     from google import genai
@@ -54,6 +55,7 @@ AI_MERGE_METHOD = os.environ.get("AI_MERGE_METHOD", "squash").strip().lower()
 AI_REVIEW_DRAFT_PRS = os.environ.get("AI_REVIEW_DRAFT_PRS", "false").lower() == "true"
 AI_REVIEW_ON_SCHEDULE = os.environ.get("AI_REVIEW_ON_SCHEDULE", "false").lower() == "true"
 AI_MAX_DIFF_CHARS = int(os.environ.get("AI_MAX_DIFF_CHARS", "20000"))
+AI_MAX_FILE_CONTEXT_CHARS = int(os.environ.get("AI_MAX_FILE_CONTEXT_CHARS", "12000"))
 AI_RETRY_COUNT = int(os.environ.get("AI_RETRY_COUNT", "2"))
 AI_RETRY_BASE_SECONDS = float(os.environ.get("AI_RETRY_BASE_SECONDS", "2"))
 AI_RETRY_MAX_SECONDS = float(os.environ.get("AI_RETRY_MAX_SECONDS", "20"))
@@ -139,6 +141,9 @@ AI_REVIEW_SCHEMA = {
     "type": "object",
     "properties": {
         "summary": {"type": "string"},
+        "diff_proves": {"type": "array", "items": {"type": "string"}},
+        "inferences": {"type": "array", "items": {"type": "string"}},
+        "uncertainties": {"type": "array", "items": {"type": "string"}},
         "confidence": {"type": "integer"},
         "recommendation": {
             "type": "string",
@@ -156,6 +161,9 @@ AI_REVIEW_SCHEMA = {
     },
     "required": [
         "summary",
+        "diff_proves",
+        "inferences",
+        "uncertainties",
         "confidence",
         "recommendation",
         "blocking",
@@ -173,6 +181,9 @@ AI_REVIEW_SCHEMA = {
 
 class AIReviewResponse(TypedDict):
     summary: str
+    diff_proves: list[str]
+    inferences: list[str]
+    uncertainties: list[str]
     confidence: int
     recommendation: str
     blocking: list[str]
@@ -189,6 +200,9 @@ class AIReviewResponse(TypedDict):
 if BaseModel is not None:
     class AIReviewModel(BaseModel):
         summary: str = ""
+        diff_proves: list[str] = Field(default_factory=list)
+        inferences: list[str] = Field(default_factory=list)
+        uncertainties: list[str] = Field(default_factory=list)
         confidence: int = Field(ge=0, le=100)
         recommendation: str
         blocking: list[str] = Field(default_factory=list)
@@ -1202,6 +1216,53 @@ def fetch_pr_diff(repo: str, pr_number: int) -> str:
     return result.stdout if result.returncode == 0 else ""
 
 
+def fetch_pr_file_at_head(repo: str, path: str, sha: str) -> str:
+    if not path or not sha:
+        return ""
+    encoded_path = quote(path.replace("\\", "/"), safe="/")
+    result = gh(
+        [
+            "api",
+            f"repos/{ORG_NAME}/{repo}/contents/{encoded_path}",
+            "-f",
+            f"ref={sha}",
+            "--jq",
+            ".content",
+        ],
+        log_failure=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return ""
+    try:
+        return base64.b64decode(result.stdout).decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def final_file_context(repo: str, pr: dict[str, Any]) -> str:
+    sha = pr_head_sha(pr)
+    if not sha:
+        return "Final file snapshots unavailable because the PR head SHA was not found."
+
+    remaining = AI_MAX_FILE_CONTEXT_CHARS
+    sections = []
+    for path in pr_file_paths(pr):
+        normalized = path.replace("\\", "/")
+        if should_skip_diff_path(normalized):
+            continue
+        if remaining <= 0:
+            sections.append("Final file context truncated due to size limits.")
+            break
+        content = sanitize_prompt_text(fetch_pr_file_at_head(repo, normalized, sha))
+        if not content:
+            continue
+        snippet = content[:remaining]
+        remaining -= len(snippet)
+        sections.append(f"### {normalized}\n```text\n{snippet}\n```")
+
+    return "\n\n".join(sections) or "No final source file snapshots were available for review."
+
+
 def analyze_diff(diff: str) -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
     current_file = ""
@@ -1539,6 +1600,9 @@ def parse_ai_review_data(data: dict[str, Any]) -> dict[str, Any] | None:
         warning("AI review returned invalid confidence; skipping AI comment.")
         return None
     for key in (
+        "diff_proves",
+        "inferences",
+        "uncertainties",
         "blocking",
         "architecture",
         "security",
@@ -1558,6 +1622,7 @@ def parse_ai_review_data(data: dict[str, Any]) -> dict[str, Any] | None:
 def ai_review_prompt(repo: str, pr: dict[str, Any], diff: str) -> str:
     labels = ", ".join(sorted(label_names(pr))) or "none"
     changed_files = "\n".join(f"- {path}" for path in pr_file_paths(pr)) or "unknown"
+    final_files = final_file_context(repo, pr)
     diff_size = len(diff)
     diff_for_review = diff[:AI_MAX_DIFF_CHARS]
     truncated_diff = sanitize_prompt_text(diff_for_review)
@@ -1580,6 +1645,21 @@ Review this PR as a Memact engineering assistant. Do not provide generic advice
 unless it is tied to the PR. Check whether the PR solves linked issues and
 whether code belongs in this repository.
 
+Evidence discipline:
+- Inspect the final file snapshots as well as the diff. Diffs can be misleading
+  after large deletions, moves, or rewrites.
+- In diff_proves, list only facts directly visible in the diff or final files.
+- In inferences, list conclusions that seem likely but are not directly proven.
+- In uncertainties, list anything you could not verify from the supplied context.
+- Be explicit when a claim is approximate. Do not say "single", "all", "never",
+  "fully", or "complete" unless the final files prove that exact claim.
+- If the PR's claimed closing issue does not match its actual scope, mark it
+  NEEDS_CHANGES.
+- If a test file is added but is not picked up by the repository test command,
+  mark it NEEDS_CHANGES.
+- If you did not receive enough final-file context to verify a strong claim,
+  lower confidence and avoid PASS.
+
 Repository: Memact/{repo}
 PR: #{pr.get("number")}
 Title: {pr.get("title", "")}
@@ -1595,6 +1675,9 @@ Linked issue context:
 
 Changed files:
 {changed_files}
+
+Final file snapshots from the PR head:
+{final_files}
 
 Repository-specific context:
 {sanitize_prompt_text(repository_context(repo))}
@@ -1629,10 +1712,17 @@ def format_ai_review_comment(review: dict[str, Any], sha: str) -> str:
         "## Summary",
         review.get("summary") or "No summary returned.",
         "",
+    ]
+    lines.extend(section("What The Diff Proves", review["diff_proves"]))
+    lines.extend(section("What Is Inferred", review["inferences"]))
+    lines.extend(section("Uncertainties", review["uncertainties"]))
+    lines.extend(
+        [
         f"## Confidence",
         f"{review.get('confidence')}%",
         "",
-    ]
+        ]
+    )
     lines.extend(section("Blocking", review["blocking"]))
     lines.extend(section("Architecture", review["architecture"]))
     lines.extend(section("Security", review["security"]))
