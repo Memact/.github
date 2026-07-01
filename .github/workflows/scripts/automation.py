@@ -21,7 +21,9 @@ import time
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import Any, TypedDict
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 try:
     from google import genai
@@ -49,6 +51,10 @@ AI_FALLBACK_MODELS = [
     for model in os.environ.get("AI_FALLBACK_MODELS", "gemini-2.5-flash").split(",")
     if model.strip()
 ]
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "qwen/qwen3-32b").strip()
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
+GROQ_VERIFY_ENABLED = os.environ.get("GROQ_VERIFY_ENABLED", "true").lower() == "true"
+GROQ_VERIFY_ALWAYS = os.environ.get("GROQ_VERIFY_ALWAYS", "true").lower() == "true"
 AI_MIN_CONFIDENCE = int(os.environ.get("AI_MIN_CONFIDENCE", "90"))
 AI_AUTO_MERGE = os.environ.get("AI_AUTO_MERGE", "false").lower() == "true"
 AI_MERGE_METHOD = os.environ.get("AI_MERGE_METHOD", "squash").strip().lower()
@@ -134,6 +140,7 @@ MARKERS = {
     "dummy_warning": "<!-- ssoc26-dummy-pr-warning -->",
     "quality": "<!-- ssoc26-quality-warning -->",
     "ai_review": "<!-- ssoc26-ai-review -->",
+    "ai_verification": "<!-- ssoc26-ai-verification -->",
     "ai_merge": "<!-- ssoc26-ai-merge-advice -->",
 }
 
@@ -1373,10 +1380,10 @@ def should_run_ai_review_for_event() -> bool:
     return event.get("action") in {"opened", "synchronize", "ready_for_review"}
 
 
-def ai_review_exists_for_sha(comments: list[dict[str, Any]], sha: str) -> bool:
+def ai_comment_exists_for_sha(comments: list[dict[str, Any]], sha: str, marker_key: str) -> bool:
     if not sha:
         return False
-    marker = MARKERS["ai_review"]
+    marker = MARKERS[marker_key]
     sha_line = f"Reviewed commit: `{sha}`"
     for comment in comments:
         username = comment.get("author", {}).get("login", "").lower()
@@ -1386,19 +1393,35 @@ def ai_review_exists_for_sha(comments: list[dict[str, Any]], sha: str) -> bool:
     return False
 
 
-def post_ai_review_comment(repo: str, pr_number: int, sha: str, body: str) -> bool:
-    if not claim_mutation(f"ai-review:{repo}:{pr_number}:{sha}"):
+def ai_review_exists_for_sha(comments: list[dict[str, Any]], sha: str) -> bool:
+    return ai_comment_exists_for_sha(comments, sha, "ai_review")
+
+
+def ai_verification_exists_for_sha(comments: list[dict[str, Any]], sha: str) -> bool:
+    return ai_comment_exists_for_sha(comments, sha, "ai_verification")
+
+
+def post_ai_comment(repo: str, pr_number: int, sha: str, body: str, marker_key: str) -> bool:
+    if not claim_mutation(f"{marker_key}:{repo}:{pr_number}:{sha}"):
         return False
     comments = fetch_pr_comments(repo, pr_number, refresh=True)
-    if ai_review_exists_for_sha(comments, sha):
-        CACHE["stats"]["ai_reviews_suppressed_existing_sha"] += 1
+    if ai_comment_exists_for_sha(comments, sha, marker_key):
+        CACHE["stats"][f"{marker_key}s_suppressed_existing_sha"] += 1
         return False
-    with temp_markdown(f"{MARKERS['ai_review']}\n{body}") as path:
+    with temp_markdown(f"{MARKERS[marker_key]}\n{body}") as path:
         result = gh(["pr", "comment", str(pr_number), "-R", f"{ORG_NAME}/{repo}", "-F", path])
     if result.returncode == 0:
         fetch_pr_comments(repo, pr_number, refresh=True)
         return True
     return False
+
+
+def post_ai_review_comment(repo: str, pr_number: int, sha: str, body: str) -> bool:
+    return post_ai_comment(repo, pr_number, sha, body, "ai_review")
+
+
+def post_ai_verification_comment(repo: str, pr_number: int, sha: str, body: str) -> bool:
+    return post_ai_comment(repo, pr_number, sha, body, "ai_verification")
 
 
 def fetch_text_file(repo: str, path: str, *, max_chars: int = 4000) -> str:
@@ -1479,6 +1502,12 @@ def sanitize_prompt_text(text: str) -> str:
 class AIProvider:
     def review(self, prompt: str) -> dict[str, Any] | None:
         raise NotImplementedError
+
+
+class AIHTTPError(Exception):
+    def __init__(self, status_code: int, message: str = "") -> None:
+        super().__init__(message or f"AI HTTP error {status_code}")
+        self.status_code = status_code
 
 
 class GeminiProvider(AIProvider):
@@ -1564,6 +1593,100 @@ class GeminiProvider(AIProvider):
         return None
 
 
+class GroqProvider(AIProvider):
+    def __init__(self, api_key: str, model: str) -> None:
+        self.api_key = api_key
+        self.model = model
+
+    def available(self) -> bool:
+        return bool(self.api_key and self.model)
+
+    def review(self, prompt: str) -> dict[str, Any] | None:
+        if not self.available():
+            return None
+
+        payload = {
+            "model": self.model,
+            "temperature": 0.2,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a precise Memact pull request reviewer. "
+                        "Return only valid JSON matching the requested schema."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        }
+        body = json.dumps(payload).encode("utf-8")
+
+        for attempt in range(AI_RETRY_COUNT + 1):
+            try:
+                request = Request(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    data=body,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with urlopen(request, timeout=60) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                content = (
+                    data.get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content", "")
+                )
+                parsed_review = parse_ai_review_response(content)
+                if parsed_review:
+                    return parsed_review
+                return None
+            except HTTPError as exc:
+                status = getattr(exc, "code", 0)
+                error_body = ""
+                try:
+                    error_body = exc.read().decode("utf-8", errors="replace")[:500]
+                except Exception:
+                    error_body = ""
+                wrapped = AIHTTPError(status, error_body)
+                if is_ai_quota_error(wrapped):
+                    info(
+                        "Groq AI provider quota or rate limit reached; skipping Groq review "
+                        f"(model={self.model}, error={wrapped.__class__.__name__})."
+                    )
+                    return None
+                if not is_transient_ai_error(wrapped) or attempt >= AI_RETRY_COUNT:
+                    info(
+                        "Groq AI provider attempt failed "
+                        f"(model={self.model}, transient={is_transient_ai_error(wrapped)}, "
+                        f"error={wrapped.__class__.__name__})."
+                    )
+                    return None
+                delay = retry_delay(attempt)
+                info(
+                    "Groq AI provider transient failure; retrying "
+                    f"(model={self.model}, attempt={attempt + 1}, delay={round(delay, 1)}s)."
+                )
+                time.sleep(delay)
+            except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+                if attempt >= AI_RETRY_COUNT:
+                    info(
+                        "Groq AI provider attempt failed "
+                        f"(model={self.model}, error={exc.__class__.__name__})."
+                    )
+                    return None
+                delay = retry_delay(attempt)
+                info(
+                    "Groq AI provider transient failure; retrying "
+                    f"(model={self.model}, attempt={attempt + 1}, delay={round(delay, 1)}s)."
+                )
+                time.sleep(delay)
+        return None
+
+
 def get_ai_provider() -> AIProvider | None:
     if not AI_ENABLED:
         return None
@@ -1571,6 +1694,13 @@ def get_ai_provider() -> AIProvider | None:
         warning(f"Unsupported AI provider '{AI_PROVIDER}'; skipping AI review.")
         return None
     return GeminiProvider(GEMINI_API_KEY, AI_MODEL)
+
+
+def get_groq_provider() -> GroqProvider | None:
+    if not AI_ENABLED or not GROQ_VERIFY_ENABLED:
+        return None
+    provider = GroqProvider(GROQ_API_KEY, GROQ_MODEL)
+    return provider if provider.available() else None
 
 
 def parse_ai_review_response(text: str) -> dict[str, Any] | None:
@@ -1691,7 +1821,57 @@ Unified diff:
 """.strip()
 
 
-def format_ai_review_comment(review: dict[str, Any], sha: str) -> str:
+def ai_verification_prompt(
+    repo: str,
+    pr: dict[str, Any],
+    diff: str,
+    primary_review: dict[str, Any] | None,
+) -> str:
+    primary_context = (
+        json.dumps(primary_review, indent=2)
+        if primary_review
+        else "Gemini did not return a usable review for this commit. Act as the primary reviewer."
+    )
+    return f"""
+{ai_review_prompt(repo, pr, diff)}
+
+Second-model verification task:
+- You are Groq verification model 2.
+- Verify whether Gemini/model 1's review is accurate, overconfident, or missing a blocking issue.
+- If Gemini/model 1 is absent, perform the full primary review yourself.
+- In summary, explicitly say whether you agree with model 1, partially agree, or replace it.
+- Use NEEDS_CHANGES if model 1 missed a real blocker, if tests fail, if issue references are wrong,
+  or if the implementation does not match the linked issue.
+- Do not rubber-stamp. Prefer lower confidence when evidence is incomplete.
+
+Model 1 review JSON:
+```json
+{primary_context}
+```
+""".strip()
+
+
+def should_run_groq_verification(review: dict[str, Any] | None) -> bool:
+    if not GROQ_VERIFY_ENABLED:
+        return False
+    if review is None:
+        return True
+    if GROQ_VERIFY_ALWAYS:
+        return True
+    if review.get("recommendation") != "PASS":
+        return True
+    if int(review.get("confidence", 0)) < AI_MIN_CONFIDENCE:
+        return True
+    return bool(review.get("uncertainties"))
+
+
+def format_ai_review_comment(
+    review: dict[str, Any],
+    sha: str,
+    *,
+    title: str = "AI Review",
+    model_label: str = "",
+) -> str:
     def section(title: str, values: list[str]) -> list[str]:
         if not values:
             return []
@@ -1705,22 +1885,28 @@ def format_ai_review_comment(review: dict[str, Any], sha: str) -> str:
     recommendation = review["recommendation"]
 
     lines = [
-        "# AI Review",
+        f"# {title}",
         "",
         f"Reviewed commit: `{sha}`",
         "",
+    ]
+    if model_label:
+        lines.extend(["## Model", model_label, ""])
+    lines.extend(
+        [
         "## Summary",
         review.get("summary") or "No summary returned.",
         "",
-    ]
+        ]
+    )
     lines.extend(section("What The Diff Proves", review["diff_proves"]))
     lines.extend(section("What Is Inferred", review["inferences"]))
     lines.extend(section("Uncertainties", review["uncertainties"]))
     lines.extend(
         [
-        f"## Confidence",
-        f"{review.get('confidence')}%",
-        "",
+            "## Confidence",
+            f"{review.get('confidence')}%",
+            "",
         ]
     )
     lines.extend(section("Blocking", review["blocking"]))
@@ -1750,12 +1936,14 @@ def format_ai_review_comment(review: dict[str, Any], sha: str) -> str:
 def ai_review_engine() -> None:
     CACHE.setdefault("ai_reviews", {})
     CACHE["stats"]["ai_reviewed"] = 0
+    CACHE["stats"]["ai_verified"] = 0
     CACHE["stats"]["ai_skipped"] = 0
     if not should_run_ai_review_for_event():
         return
 
     provider = get_ai_provider()
-    if provider is None:
+    groq_provider = get_groq_provider()
+    if provider is None and groq_provider is None:
         return
 
     ai_calls_attempted = 0
@@ -1782,7 +1970,9 @@ def ai_review_engine() -> None:
                 continue
             pr_number = pr["number"]
             comments = fetch_pr_comments(repo, pr_number, refresh=True)
-            if ai_review_exists_for_sha(comments, sha):
+            review_exists = ai_review_exists_for_sha(comments, sha)
+            verification_exists = ai_verification_exists_for_sha(comments, sha)
+            if review_exists and (verification_exists or not groq_provider):
                 CACHE["stats"]["ai_skipped"] += 1
                 continue
             diff = fetch_pr_diff(repo, pr_number)
@@ -1793,14 +1983,56 @@ def ai_review_engine() -> None:
                 info(f"Cooling down before next AI request ({AI_REQUEST_COOLDOWN_SECONDS}s).")
                 time.sleep(AI_REQUEST_COOLDOWN_SECONDS)
             ai_calls_attempted += 1
-            review = provider.review(ai_review_prompt(repo, pr, diff))
-            if review is None:
-                CACHE["stats"]["ai_skipped"] += 1
+            review = None
+            if not review_exists and provider is not None:
+                review = provider.review(ai_review_prompt(repo, pr, diff))
+                if review is not None:
+                    CACHE["ai_reviews"][(repo, pr_number, sha)] = review
+                    body = format_ai_review_comment(
+                        review,
+                        sha,
+                        title="AI Review - Gemini (Model 1)",
+                        model_label=f"Gemini `{AI_MODEL}`",
+                    )
+                    if post_ai_review_comment(repo, pr_number, sha, body):
+                        CACHE["stats"]["ai_reviewed"] += 1
+                        action(f"ai_review_posted repo={repo} pr=#{pr_number} sha={sha[:12]}")
+
+            if review is None and not review_exists and groq_provider is not None:
+                review = groq_provider.review(ai_review_prompt(repo, pr, diff))
+                if review is not None:
+                    CACHE["ai_reviews"][(repo, pr_number, sha)] = review
+                    body = format_ai_review_comment(
+                        review,
+                        sha,
+                        title="AI Review - Groq Fallback (Model 2)",
+                        model_label=f"Groq `{GROQ_MODEL}`",
+                    )
+                    if post_ai_review_comment(repo, pr_number, sha, body):
+                        CACHE["stats"]["ai_reviewed"] += 1
+                        action(f"ai_review_groq_fallback_posted repo={repo} pr=#{pr_number} sha={sha[:12]}")
+
+            if groq_provider is None or verification_exists or not should_run_groq_verification(review):
+                if review is None and not review_exists:
+                    CACHE["stats"]["ai_skipped"] += 1
                 continue
-            CACHE["ai_reviews"][(repo, pr_number, sha)] = review
-            if post_ai_review_comment(repo, pr_number, sha, format_ai_review_comment(review, sha)):
-                CACHE["stats"]["ai_reviewed"] += 1
-                action(f"ai_review_posted repo={repo} pr=#{pr_number} sha={sha[:12]}")
+
+            if ai_calls_attempted and AI_REQUEST_COOLDOWN_SECONDS > 0:
+                info(f"Cooling down before Groq verification ({AI_REQUEST_COOLDOWN_SECONDS}s).")
+                time.sleep(AI_REQUEST_COOLDOWN_SECONDS)
+            ai_calls_attempted += 1
+            verification = groq_provider.review(ai_verification_prompt(repo, pr, diff, review))
+            if verification is None:
+                continue
+            body = format_ai_review_comment(
+                verification,
+                sha,
+                title="AI Verification - Groq (Model 2)",
+                model_label=f"Groq `{GROQ_MODEL}` verifying Gemini/model 1",
+            )
+            if post_ai_verification_comment(repo, pr_number, sha, body):
+                CACHE["stats"]["ai_verified"] += 1
+                action(f"ai_verification_posted repo={repo} pr=#{pr_number} sha={sha[:12]}")
 
 
 def ci_successful(pr: dict[str, Any]) -> bool:
