@@ -42,7 +42,8 @@ env:
   AI_PROVIDER: gemini
   AI_MODEL: gemini-2.5-flash-lite
   AI_FALLBACK_MODELS: gemini-2.5-flash
-  GROQ_MODEL: qwen/qwen3-32b
+  GROQ_MODEL: openai/gpt-oss-120b
+  GROQ_FALLBACK_MODELS: qwen/qwen3.6-27b
   GROQ_VERIFY_ENABLED: "true"
   GROQ_VERIFY_ALWAYS: "true"
   AI_MIN_CONFIDENCE: "90"
