@@ -458,6 +458,15 @@ def label_names(item: dict[str, Any]) -> set[str]:
     return {normalize_label(label.get("name", "")) for label in item.get("labels", [])}
 
 
+def is_dummy_tracking_pr(pr: dict[str, Any]) -> bool:
+    text = f"{pr.get('title', '')}\n{pr.get('body') or ''}".lower()
+    return (
+        "dummy pull request" in text
+        or "ssoc26 contribution tracking" in text
+        or ("target pr:" in text and "target repository:" in text)
+    )
+
+
 def author_login(item: dict[str, Any]) -> str:
     return item.get("author", {}).get("login", "").lower()
 
@@ -1122,6 +1131,8 @@ def pr_label_engine() -> None:
         for pr in prs:
             if pr.get("state", "").lower() != "open":
                 continue
+            if repo == CONTEXT_REPO and is_dummy_tracking_pr(pr):
+                continue
             pr_number = pr["number"]
             pr_labels = sync_normalized_labels("pr", repo, pr_number, label_names(pr))
             text = f"{pr.get('title', '')}\n{pr.get('body') or ''}"
@@ -1182,11 +1193,13 @@ def dummy_pr_engine() -> None:
                 if not source_labels:
                     source_labels.add("SSoC26")
                 dummy_labels = label_names(dummy_pr)
+                stale_difficulty_labels = (dummy_labels & DIFFICULTIES) - source_labels
                 edit_labels(
                     "pr",
                     CONTEXT_REPO,
                     dummy_pr["number"],
                     add=sorted(source_labels - dummy_labels),
+                    remove=sorted(stale_difficulty_labels),
                 )
                 action(f"dummy_pr_found repo={repo} pr=#{pr['number']} context_pr=#{dummy_pr['number']}")
                 if post_comment_once(
